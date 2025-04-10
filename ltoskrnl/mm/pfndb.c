@@ -72,7 +72,7 @@ VOID *PfnDatabaseAllocatePages(struct PFN_DATABASE *self, UINTPTR pageCount)
 
     HalExitLock(&self->monitor);
 
-    HalBugcheck("Out of memory!");
+    INU_BUGCHECK("Out of memory!");
     return NULL;
 }
 

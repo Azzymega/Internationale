@@ -35,6 +35,15 @@
 #define PIC_READ_IRR 0x0a
 #define PIC_READ_ISR 0x0b
 
+#define FwX86TextModeAddress ((INT16*)0xb8000)
+
+struct INUPACKED FwX86TextModeState
+{
+    UINT16 x;
+    UINT16 y;
+};
+
+VOID FwiInitializeDisplay();
 VOID FwiClockHandler(VOID* handler);
 VOID FwiPitInitialize(VOID);
 VOID FwiPicInitialize(VOID);

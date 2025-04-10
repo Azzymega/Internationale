@@ -1,7 +1,6 @@
 .macro ISR_NOERRCODE num
 .global HaliIsr\num
 HaliIsr\num:
-    cli
     pushl $0
     pushl $\num
     jmp isr_common_stub
@@ -10,7 +9,6 @@ HaliIsr\num:
 .macro ISR_ERRCODE num
 .global HaliIsr\num
 HaliIsr\num:
-    cli
     pushl $\num
     jmp isr_common_stub
 .endm
@@ -18,7 +16,6 @@ HaliIsr\num:
 .macro IRQ num irq_num
 .global HaliIrq\num
 HaliIrq\num:
-    cli
     pushl $0
     pushl $\irq_num
     jmp irq_common_stub
@@ -74,85 +71,72 @@ IRQ 13, 45
 IRQ 14, 46
 IRQ 15, 47
 
-isr_common_stub:
-    subl $108, %esp
-    fnsave (%esp)
-    pusha
-    push %ds
-    push %es
-    push %fs
-    push %gs
-    mov $0x10, %ax
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
-    mov %cr0, %eax
-    push %eax
-    mov %cr2, %eax
-    push %eax
-    mov %cr3, %eax
-    push %eax
-    mov %cr4, %eax
-    push %eax
-    mov %dr0, %eax
-    push %eax
-    mov %dr1, %eax
-    push %eax
-    mov %dr2, %eax
-    push %eax
-    mov %dr3, %eax
-    push %eax
-    mov %dr6, %eax
-    push %eax
-    mov %dr7, %eax
-    push %eax
-    push %esp
-    call HaliIsrHandler
-    add $4, %esp
+.global HaliX86FlushGdt
+HaliX86FlushGdt:
+	mov $0x10,%ax
+	mov %ax, %ds
+	mov %ax, %es
+	mov %ax, %fs
+	mov %ax, %gs
+	mov %ax, %ss
+	jmp $0x08,$FlushEnd
+FlushEnd:
+    ret
+
+.global HaliX86IretJump
+HaliX86IretJump:
     pop %eax
-    mov %eax, %dr7
+
     pop %eax
-    mov %eax, %dr6
-    pop %eax
-    mov %eax, %dr3
-    pop %eax
-    mov %eax, %dr2
-    pop %eax
-    mov %eax, %dr1
-    pop %eax
-    mov %eax, %dr0
-    pop %eax
-    mov %eax, %cr4
-    pop %eax
-    mov %eax, %cr3
-    pop %eax
-    mov %eax, %cr2
-    pop %eax
-    mov %eax, %cr0
-    pop %gs
-    pop %fs
-    pop %es
-    pop %ds
-    popa
-    frstor (%esp)
-    addl $108, %esp
-    add $8, %esp
+    pop %ecx
+    pop %edx
+
+    pop %ebp
+    pop %esp
+
+    push %edx
+    push %ecx
+    push %eax
+
     iret
 
-irq_common_stub:
+.global HaliX86SetCrs
+HaliX86SetCrs:
+    pop %eax
+
+    pop %ecx
+    mov %ecx, %cr3
+
+    pop %ecx
+    mov %ecx, %cr0
+
+    pop %ecx
+    mov %ecx, %cr4
+
+    push %eax
+    ret
+
+
+
+
+isr_common_stub:
+    push %esp
+    push %eax
+    push %ecx
+    push %edx
+    push %ebx
+    push %ebp
+    push %esi
+    push %edi
+
     subl $108, %esp
     fnsave (%esp)
-    pusha
+
     push %ds
     push %es
     push %fs
     push %gs
-    mov $0x10, %ax
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
+
     mov %cr0, %eax
     push %eax
     mov %cr2, %eax
@@ -161,6 +145,7 @@ irq_common_stub:
     push %eax
     mov %cr4, %eax
     push %eax
+
     mov %dr0, %eax
     push %eax
     mov %dr1, %eax
@@ -173,8 +158,14 @@ irq_common_stub:
     push %eax
     mov %dr7, %eax
     push %eax
+
     push %esp
-    call HaliIrqHandler
+    call HaliIsrHandler
+    cmpl $1, %eax
+    jl IsrUserRet
+
+    IsrKernelRet:
+
     add $4, %esp
     pop %eax
     mov %eax, %dr7
@@ -200,14 +191,110 @@ irq_common_stub:
     pop %fs
     pop %es
     pop %ds
-    popa
+
     frstor (%esp)
     addl $108, %esp
-    add $8, %esp
-    mov $0x20, %al
-    out %al, $0x20
-    cmpl $40, 8(%esp)
-    jl eoi_done
-    out %al, $0xA0
-eoi_done:
+
+    pop %edi
+    pop %esi
+    pop %ebp
+    pop %ebx
+    pop %edx
+    pop %ecx
+    pop %eax
+    pop %esp
+
     iret
+
+    IsrUserRet:
+    rsm
+
+irq_common_stub:
+    push %esp
+    push %eax
+    push %ecx
+    push %edx
+    push %ebx
+    push %ebp
+    push %esi
+    push %edi
+
+    subl $108, %esp
+    fnsave (%esp)
+
+    push %ds
+    push %es
+    push %fs
+    push %gs
+
+    mov %cr0, %eax
+    push %eax
+    mov %cr2, %eax
+    push %eax
+    mov %cr3, %eax
+    push %eax
+    mov %cr4, %eax
+    push %eax
+
+    mov %dr0, %eax
+    push %eax
+    mov %dr1, %eax
+    push %eax
+    mov %dr2, %eax
+    push %eax
+    mov %dr3, %eax
+    push %eax
+    mov %dr6, %eax
+    push %eax
+    mov %dr7, %eax
+    push %eax
+
+    push %esp
+    call HaliIrqHandler
+    cmpl $1, %eax
+    jl IrqUserRet
+
+    IrqKernelRet:
+
+    add $4, %esp
+    pop %eax
+    mov %eax, %dr7
+    pop %eax
+    mov %eax, %dr6
+    pop %eax
+    mov %eax, %dr3
+    pop %eax
+    mov %eax, %dr2
+    pop %eax
+    mov %eax, %dr1
+    pop %eax
+    mov %eax, %dr0
+    pop %eax
+    mov %eax, %cr4
+    pop %eax
+    mov %eax, %cr3
+    pop %eax
+    mov %eax, %cr2
+    pop %eax
+    mov %eax, %cr0
+    pop %gs
+    pop %fs
+    pop %es
+    pop %ds
+
+    frstor (%esp)
+    addl $108, %esp
+
+    pop %edi
+    pop %esi
+    pop %ebp
+    pop %ebx
+    pop %edx
+    pop %ecx
+    pop %eax
+    pop %esp
+
+    iret
+
+    IrqUserRet:
+    rsm

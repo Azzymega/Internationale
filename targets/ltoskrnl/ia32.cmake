@@ -25,7 +25,7 @@ set(KERNEL_LINK_FLAGS ${LINKING_FLAGS} -fno-plt -fno-pic -Wl,--no-pie)
 set(LOADER_LINK_FLAGS ${LINKING_FLAGS} -Wl,--no-pie)
 
 set(CLANG_ERROR_FLAGS -Wno-vla)
-set(COMPILING_FLAGS ${CLANG_ERROR_FLAGS} -ffreestanding -Wextra -Wall -Wpedantic -Wfatal-errors -O0 -mno-sse -fshort-wchar)
+set(COMPILING_FLAGS ${CLANG_ERROR_FLAGS} -ffreestanding -Wextra -Wall -Wpedantic -Wfatal-errors -O0 -g -mno-sse -fshort-wchar)
 
 add_compile_options(${COMPILING_FLAGS})
 

@@ -1,0 +1,99 @@
+#include <hal/hal.h>
+#include <mm/mm.h>
+#include <ps/proc.h>
+
+#define PS_BASE_STACK_PAGE_SIZE 100
+
+INUGLOBAL UINTPTR PsGlobalThreadId;
+INUEXTERN struct LIST_ENTRY PsGlobalSchedulableObjectCollection;
+
+struct THREAD* ThreadAllocate()
+{
+    struct THREAD* thread = MmAllocatePoolWithTag(NonPagedPoolZeroed,sizeof(struct THREAD),0);
+    return thread;
+}
+
+VOID ThreadInitialize(struct THREAD* self, struct PROCESS* process)
+{
+    ProcessAddSchedulableObject(process,self);
+
+    self->header.type = THREAD_TYPE;
+
+    self->owner = process;
+    self->type = SCHEDULABLE_OBJECT_THREAD;
+    self->state = SCHEDULABLE_OBJECT_WAITING;
+
+    self->isLoaded = FALSE;
+    self->id = PsGlobalThreadId++;
+    self->stackLength = 0;
+    self->isSleep = FALSE;
+    self->sleepLength = 0;
+    self->sleepStart = 0;
+    self->priority = 0;
+    self->lockCount = 1;
+    self->frame = MmAllocatePoolWithTag(NonPagedPoolZeroed,HalGetSerializedStateSize(),0);
+
+    ListEntryInitialize(&self->schedulableCollection,self);
+    ListEntryInitialize(&self->processThreadCollection,self);
+
+    ListEntryAdd(&process->scheduableObjects,&self->processThreadCollection);
+    ListEntryAdd(&PsGlobalSchedulableObjectCollection,&self->schedulableCollection);
+}
+
+VOID ThreadLoad(struct THREAD *self, struct PROCESS *process, VOID *func, VOID *arg)
+{
+    INU_ASSERT(self);
+    INU_ASSERT(process);
+    INU_ASSERT(func);
+    INU_ASSERT(process->vasDescriptor);
+    INU_ASSERT(process->vasDescriptor->pageTables);
+
+    self->isLoaded = TRUE;
+
+    // TODO: MAKE NORMAL USERMODE VMALLOC ALLOCATOR!
+    if (process->mode == PROCESS_KERNEL)
+    {
+        VOID* stack = MmAllocatePhysical(PS_BASE_STACK_PAGE_SIZE);
+        HalModifyFrame(self->frame,process->vasDescriptor->pageTables,stack+PS_BASE_STACK_PAGE_SIZE*HalGetPageSize(),func,arg,process->mode);
+    }
+    else
+    {
+        INU_BUGCHECK("Not implemented!");
+    }
+}
+
+VOID ThreadUnlock(struct THREAD *self)
+{
+    self->lockCount--;
+
+    INU_ASSERT(self->lockCount >= 0);
+
+    if (self->lockCount == 0)
+    {
+        if (self->state == SCHEDULABLE_OBJECT_WAITING)
+        {
+            self->state = SCHEDULABLE_OBJECT_READY;
+        }
+    }
+    else
+    {
+
+    }
+}
+
+VOID ThreadLock(struct THREAD *self)
+{
+    self->lockCount++;
+
+    if (self->lockCount == 1)
+    {
+        if (self->state == SCHEDULABLE_OBJECT_READY)
+        {
+            self->state = SCHEDULABLE_OBJECT_WAITING;
+        }
+    }
+    else
+    {
+
+    }
+}

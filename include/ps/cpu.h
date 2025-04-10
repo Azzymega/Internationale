@@ -5,6 +5,6 @@ struct PROCESSOR_DESCRIPTOR
 {
     UINTPTR index;
     UINTPTR controlLevel;
-    struct SCHEDULABLE_OBJECT* schedulableObject;
+    struct THREAD* schedulableObject;
     VOID* interruptFrame;
 };

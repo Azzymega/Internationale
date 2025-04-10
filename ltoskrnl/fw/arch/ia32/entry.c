@@ -1,9 +1,11 @@
+#include <limits.h>
 #include <ltbase.h>
-#include <stdbool.h>
+#include <stdarg.h>
 #include <hal/hal.h>
 #include <fw/fw.h>
 #include <mm/mm.h>
 #include <ps/cpu.h>
+#include <rtl/rtl.h>
 
 #include "fwi.h"
 
@@ -14,6 +16,7 @@
 INUGLOBAL struct PROCESSOR_DESCRIPTOR FwGlobalProcessorsDescriptors[FW_CPU_COUNT];
 INUGLOBAL UINTPTR FwGlobalClock;
 INUGLOBAL TRAP_HANDLER FwGlobalSchedulerHandler;
+INUGLOBAL struct FwX86TextModeState FwGlobalTextModeState;
 
 VOID FwInitialize(VOID)
 {
@@ -23,12 +26,12 @@ VOID FwInitialize(VOID)
     HalInitialize();
     FwiPicInitialize();
     FwiPitInitialize();
+    FwiInitializeDisplay();
     MmInitialize(memStart,memLength);
     HalSetInterrupt(FwiClockHandler,FW_TIMER_INTERRUPT_INDEX,CONTROL_LEVEL_TIMER);
+    PsInitialize();
 
-    HalEnableInterrupts();
-
-    while (true)
+    while (TRUE)
     {
 
     }
@@ -46,7 +49,16 @@ UINTPTR FwGetCpuIndex()
 
 VOID FwRaiseControlLevel(UINTPTR level)
 {
-    FwGetCurrentCpuDescriptor()->controlLevel = level;
+    CONTROL_LEVEL currentControl = FwGetCurrentCpuDescriptor()->controlLevel;
+
+    if (level == currentControl)
+    {
+        return;
+    }
+    else
+    {
+        FwGetCurrentCpuDescriptor()->controlLevel = level;
+    }
 
     for (int i = 32; i < 47; ++i)
     {
@@ -63,6 +75,11 @@ VOID FwRaiseControlLevel(UINTPTR level)
     }
 }
 
+VOID FwSignalEoi(UINTPTR irqIndex)
+{
+    FwiPicSendEoi(irqIndex);
+}
+
 CONTROL_LEVEL FwGetControlLevel()
 {
     return FwGetCurrentCpuDescriptor()->controlLevel;
@@ -77,6 +94,8 @@ UINTPTR FwClock()
 {
     return FwGlobalClock;
 }
+
+
 
 VOID FwiClockHandler(VOID* handler)
 {
@@ -234,4 +253,232 @@ VOID FwiPicDisable() {
 
 UINT16 FwiPicGetIrqIndex() {
     return FwiPicGetIsr();
+}
+
+VOID FwpScrollTextModeScreen()
+{
+    FwGlobalTextModeState.y += 1;
+    FwGlobalTextModeState.x = 0;
+
+    if (FwGlobalTextModeState.y >= 25)
+    {
+        FwGlobalTextModeState.y = 24;
+        FwGlobalTextModeState.x = 0;
+        RtlMoveMemory(FwX86TextModeAddress,FwX86TextModeAddress + 80, 160 * 24);
+        RtlSetMemory(&FwX86TextModeAddress[0 + (24 * 80)], 0, 160);
+    }
+}
+
+INT32 FwpPrintCharacterTextModeScreen(char value)
+{
+    Start:
+        if (FwGlobalTextModeState.x >= 80)
+        {
+            FwpScrollTextModeScreen();
+            goto Start;
+        }
+
+    if (value == '\r')
+    {
+        FwGlobalTextModeState.x = 0;
+    }
+    else if (value == '\n')
+    {
+        FwpScrollTextModeScreen();
+    }
+    else
+    {
+        uint16_t attrib = (0 << 4) | (7 & 0x0F);
+        FwX86TextModeAddress[((FwGlobalTextModeState.x++) + (FwGlobalTextModeState.y * 80))] = value | attrib << 8;
+    }
+
+    return value;
+}
+
+static BOOLEAN FwpPrint(const char *data, UINTPTR length)
+{
+    const unsigned char *bytes = (const unsigned char *) data;
+    for (UINTPTR i = 0; i < length; i++)
+        if (FwpPrintCharacterTextModeScreen(bytes[i]) == -1)
+            return FALSE;
+    return TRUE;
+}
+
+char *FwpUlongToString(UINT64 value, char *string, int radix)
+{
+    char *baseStr = string;
+    unsigned char index;
+    char buffer[32];
+
+    index = 32;
+
+    do
+    {
+        buffer[--index] = '0' + (value % radix);
+        if (buffer[index] > '9')
+            buffer[index] += 'A' - ':';
+        value /= radix;
+    }
+    while (value != 0);
+
+    do
+    {
+        *string++ = buffer[index++];
+    }
+    while (index < 32);
+
+    *string = 0;
+    return baseStr;
+}
+
+
+VOID FwDebugPrint(const char *format, ...)
+{
+    FwPrint("[DEBUG] ");
+    va_list parameters;
+    va_start(parameters, format);
+
+    int written = 0;
+
+    while (*format != '\0')
+    {
+        UINTPTR maxrem = INT_MAX - written;
+
+        if (format[0] != '%' || format[1] == '%')
+        {
+            if (format[0] == '%')
+                format++;
+            UINTPTR amount = 1;
+            while (format[amount] && format[amount] != '%')
+                amount++;
+            if (maxrem < amount)
+            {
+                return;
+            }
+            if (!FwpPrint(format, amount))
+                return;
+            format += amount;
+            written += amount;
+            continue;
+        }
+
+        const char *format_begun_at = format++;
+
+        if (*format == 'c')
+        {
+            format++;
+            char c = (char) va_arg(parameters, int);
+            if (!maxrem)
+            {
+                return;
+            }
+            if (!FwpPrint(&c, sizeof(c)))
+                return;
+            written++;
+        }
+        else if (*format == 's')
+        {
+            format++;
+            const char *str = va_arg(parameters, const char*);
+            UINTPTR len = strlen(str);
+            if (maxrem < len)
+            {
+                return;
+            }
+            if (!FwpPrint(str, len))
+                return;
+            written += len;
+        }
+        else if (*format == 'i')
+        {
+            format++;
+            int value = va_arg(parameters, int);
+            char buff[100];
+            char *str = itoa(value, buff, 10);
+            UINTPTR len = strlen(str);
+            if (maxrem < len)
+            {
+                return;
+            }
+            if (!FwpPrint(str, len))
+                return;
+            written += len;
+        }
+        else if (*format == 'x')
+        {
+            format++;
+            int value = va_arg(parameters, int);
+            char buff[100];
+            char *str = FwpUlongToString(value, buff, 16);
+            UINTPTR len = strlen(str);
+            if (maxrem < len)
+            {
+                return;
+            }
+            if (!FwpPrint(str, len))
+                return;
+            written += len;
+        }
+        else
+        {
+            format = format_begun_at;
+            UINTPTR len = strlen(format);
+            if (maxrem < len)
+            {
+                return;
+            }
+            if (!FwpPrint(format, len))
+                return;
+            written += len;
+            format += len;
+        }
+    }
+
+    va_end(parameters);
+    return;
+}
+
+VOID FwpElbow(const char *string)
+{
+    for (UINTPTR i = 0; i < 25; ++i)
+    {
+        for (UINTPTR q = 0; q < 80; ++q)
+        {
+            FwpPrintCharacterTextModeScreen(' ');
+        }
+    }
+
+    FwGlobalTextModeState.x = 0;
+    FwGlobalTextModeState.y = 0;
+
+    const UINTPTR stringLength = strlen(string);
+    for (int i = 0; i < stringLength; ++i)
+    {
+        FwpPrintCharacterTextModeScreen(string[i]);
+    }
+}
+
+VOID FwPrint(const char *string)
+{
+    const UINTPTR stringLength = strlen(string);
+    for (int i = 0; i < stringLength; ++i)
+    {
+        FwpPrintCharacterTextModeScreen(string[i]);
+    }
+}
+
+VOID FwPutCharacter(CHAR wchar)
+{
+    FwpPrintCharacterTextModeScreen(wchar);
+}
+
+VOID FwiInitializeDisplay()
+{
+    for (UINTPTR i = 0; i < 25; ++i)
+    {
+        for (UINTPTR q = 0; q < 80; ++q)
+        {
+            FwpPrintCharacterTextModeScreen(' ');
+        }
+    }
 }

@@ -1,3 +1,5 @@
+OUTPUT_FORMAT(elf32-i386)
+
 ENTRY(FwBoot)
 
 SECTIONS
@@ -5,19 +7,28 @@ SECTIONS
 
 	. = 1M;
 
-	.text :
+    .interp :
+    {
+        *(.multiboot)
+        *(.interp)
+    }
+
+	.text ALIGN(4K) :
 	{
-		*(.multiboot)
+        *(.multiboot)
 		*(.text)
 	}
 
 	.rodata ALIGN(4K) :
 	{
+	    *(.multiboot)
+	    *(.rodata.str1.1)
 		*(.rodata)
 	}
 
 	.data ALIGN(4K) :
 	{
+	    *(.multiboot)
 		*(.data)
 	}
 

@@ -104,7 +104,7 @@ VOID MemoryHeapFree(struct MEMORY_HEAP *self, VOID *ptr)
     }
     else
     {
-        HalBugcheck("Heap free failed!");
+        INU_BUGCHECK("Heap free failed!");
     }
 }
 

@@ -11,9 +11,10 @@ enum CONTROL_LEVEL_TYPE
 };
 
 UINTPTR FwClock();
-VOID FwInitialize(VOID);
+VOID FwInitialize(UINTPTR magic, UINTPTR ptr);
 VOID FwSetScheduler(TRAP_HANDLER handler);
-VOID FwPrint(const char* message);
+VOID FwYieldToDispatch();
+VOID FwSetInterruptFrame(VOID* frame);
 VOID FwDebugPrint(const char *format, ...);
 
 UINTPTR FwGetCpuIndex();

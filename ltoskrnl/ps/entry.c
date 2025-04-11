@@ -1,5 +1,6 @@
 #include <fw/fw.h>
 #include <hal/hal.h>
+#include <ke/ke.h>
 #include <ps/ps.h>
 #include <ps/sched.h>
 #include <ps/cpu.h>
@@ -23,15 +24,21 @@ VOID PsiInitializeKernelProcess()
 
 VOID PsiIdle()
 {
+    struct THREAD* thread;
+    PsCreateThread(&thread,&PsGlobalKernelProcess,KeEntry,NULL);
+    PsUnlockThread(thread);
+
     while (TRUE)
     {
-        FwDebugPrint("Time is %i ms\r\n",FwClock());
+        FwYieldToDispatch();
     }
 }
 
 VOID PsiSchedule(VOID* trapFrame)
 {
-    struct THREAD* currentThread = FwGetCurrentCpuDescriptor()->schedulableObject;
+    struct THREAD* currentThread;
+    PsGetCurrentThread(&currentThread);
+
     struct LIST_ENTRY* threadList = &PsGlobalSchedulableObjectCollection;
     struct THREAD* targetThread = NULL;
 
@@ -39,17 +46,32 @@ VOID PsiSchedule(VOID* trapFrame)
 
     HalSaveState(currentThread,trapFrame);
 
-    targetThread = ListEntryNext(currentThread->schedulableCollection.next);
+    targetThread = currentThread->schedulableCollection.owner;
 
     Select:
 
-    targetThread = ListEntryNext(targetThread->schedulableCollection.next);
+    targetThread = ListEntryNext(&targetThread->schedulableCollection);
 
     INU_ASSERT(targetThread);
     INU_ASSERT(threadList);
 
     if (targetThread->state != SCHEDULABLE_OBJECT_READY)
     {
+        if (targetThread->isSleep == TRUE)
+        {
+            const UINTPTR clock = FwClock();
+
+            if (targetThread->sleepStart + targetThread->sleepLength < clock)
+            {
+                targetThread->isSleep = FALSE;
+                PsUnlockThread(targetThread);
+            }
+        }
+        else
+        {
+
+        }
+
         goto Select;
     }
 
@@ -60,16 +82,22 @@ VOID PsiSchedule(VOID* trapFrame)
 
 VOID PsiInitializeIdleThread()
 {
-    struct THREAD *thread = ThreadAllocate();
-    ThreadInitialize(thread,&PsGlobalKernelProcess);
-    ThreadLoad(thread,&PsGlobalKernelProcess,PsiIdle,NULL);
-    ProcessAddSchedulableObject(&PsGlobalKernelProcess,thread);
+    struct THREAD *thread = NULL;
 
-    FwGetCurrentCpuDescriptor()->controlLevel = 0;
-    FwGetCurrentCpuDescriptor()->schedulableObject = thread;
+    INUSTATUS res =  PsCreateThread(&thread,&PsGlobalKernelProcess,PsiIdle,NULL);
 
-    ThreadUnlock(thread);
-    HalJumpInKernelThread(thread);
+    if (!INU_SUCCESS(res))
+    {
+        INU_BUGCHECK("Failed to initialize idle thread!");
+    }
+    else
+    {
+        FwGetCurrentCpuDescriptor()->controlLevel = 0;
+        FwGetCurrentCpuDescriptor()->schedulableObject = thread;
+
+        PsUnlockThread(thread);
+        HalJumpInKernelThread(thread);
+    }
 }
 
 VOID PsiThreadPrologue(VOID *arg, VOID *func)

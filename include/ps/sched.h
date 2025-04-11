@@ -51,3 +51,4 @@ VOID ThreadInitialize(struct THREAD* self, struct PROCESS* process);
 VOID ThreadLoad(struct THREAD* self, struct PROCESS* process, VOID* func, VOID* arg);
 VOID ThreadLock(struct THREAD* self);
 VOID ThreadUnlock(struct THREAD* self);
+VOID ThreadSleep(struct THREAD* self, UINTPTR count);

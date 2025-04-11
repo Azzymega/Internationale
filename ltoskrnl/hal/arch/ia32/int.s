@@ -21,6 +21,12 @@ HaliIrq\num:
     jmp irq_common_stub
 .endm
 
+.global HaliDispatch
+HaliDispatch:
+    pushl $0xCAFE
+    pushl $0xFE
+    jmp irq_common_stub
+
 ISR_NOERRCODE 0
 ISR_NOERRCODE 1
 ISR_NOERRCODE 2

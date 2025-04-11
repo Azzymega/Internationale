@@ -1,2 +1,2 @@
 
-add_library(hal STATIC entry.c int.s thread.c)
+add_library(hal STATIC entry.c int.s)

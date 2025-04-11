@@ -3,6 +3,7 @@
 #include <ps/proc.h>
 
 INUGLOBAL UINTPTR PsGlobalProcessId;
+INUEXTERN struct LIST_ENTRY PsGlobalSchedulableObjectCollection;
 
 struct PROCESS* ProcessAllocate()
 {
@@ -29,9 +30,11 @@ VOID ProcessInitialize(struct PROCESS *self, struct VAS_DESCRIPTOR *vas, enum PR
 VOID ProcessRemoveSchedulableObject(struct PROCESS *self, struct THREAD *object)
 {
     ListEntryRemove(&object->processThreadCollection);
+    ListEntryRemove(&object->schedulableCollection);
 }
 
 VOID ProcessAddSchedulableObject(struct PROCESS *self, struct THREAD *object)
 {
     ListEntryAdd(&self->scheduableObjects,&object->processThreadCollection);
+    ListEntryAdd(&PsGlobalSchedulableObjectCollection,&object->schedulableCollection);
 }

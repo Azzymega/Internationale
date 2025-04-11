@@ -43,5 +43,22 @@ VOID * MmAllocatePoolWithTag(enum POOL_TYPE type, UINTPTR length, UINT32 tag)
 
 VOID MmFreePoolWithTag(VOID *pool, UINT32 tag)
 {
-
+    MemoryHeapFree(&MmGlobalMemoryHeap,pool);
 }
+
+INTPTR MmGetTotalMemory()
+{
+    return MmPfnGlobalDatabase.count*HalGetPageSize();
+}
+
+INTPTR MmGetOccupiedMemory()
+{
+    return MmPfnGlobalDatabase.allocated*HalGetPageSize();
+}
+
+INTPTR MmGetFreeMemory()
+{
+    return MmGetTotalMemory()-MmGetOccupiedMemory();
+}
+
+

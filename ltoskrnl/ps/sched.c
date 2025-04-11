@@ -1,6 +1,8 @@
+#include <fw/fw.h>
 #include <hal/hal.h>
 #include <mm/mm.h>
 #include <ps/proc.h>
+#include <ps/ps.h>
 
 #define PS_BASE_STACK_PAGE_SIZE 100
 
@@ -15,8 +17,6 @@ struct THREAD* ThreadAllocate()
 
 VOID ThreadInitialize(struct THREAD* self, struct PROCESS* process)
 {
-    ProcessAddSchedulableObject(process,self);
-
     self->header.type = THREAD_TYPE;
 
     self->owner = process;
@@ -35,9 +35,7 @@ VOID ThreadInitialize(struct THREAD* self, struct PROCESS* process)
 
     ListEntryInitialize(&self->schedulableCollection,self);
     ListEntryInitialize(&self->processThreadCollection,self);
-
-    ListEntryAdd(&process->scheduableObjects,&self->processThreadCollection);
-    ListEntryAdd(&PsGlobalSchedulableObjectCollection,&self->schedulableCollection);
+    ListEntryInitialize(&self->externalLock,self);
 }
 
 VOID ThreadLoad(struct THREAD *self, struct PROCESS *process, VOID *func, VOID *arg)
@@ -81,6 +79,14 @@ VOID ThreadUnlock(struct THREAD *self)
     }
 }
 
+VOID ThreadSleep(struct THREAD* self, UINTPTR count)
+{
+    self->sleepLength = 500;
+    self->sleepStart = FwClock();
+    self->isSleep = TRUE;
+    ThreadLock(self);
+}
+
 VOID ThreadLock(struct THREAD *self)
 {
     self->lockCount++;
@@ -95,5 +101,14 @@ VOID ThreadLock(struct THREAD *self)
     else
     {
 
+    }
+
+    struct THREAD* current;
+    if (INU_SUCCESS(PsGetCurrentThread(&current)))
+    {
+        if (current == self)
+        {
+            FwYieldToDispatch();
+        }
     }
 }

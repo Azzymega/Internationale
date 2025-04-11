@@ -32,6 +32,9 @@
 #define X86_HAL_GPF_INDEX 13
 #define X86_HAL_PF_INDEX 14
 
+#define X86_HAL_DISPATCH 0xFE
+#define X86_HAL_SOFTWARE_DISPATCH 0xCAFE
+
 INUGLOBAL struct HaliX86GdtEntry FwGdtEntryTable[X86_HAL_DESCRIPTOR_COUNT];
 INUGLOBAL struct HaliX86Tss FwKernelTss;
 INUGLOBAL struct HaliX86GdtPointer FwGdtPointer;
@@ -94,6 +97,8 @@ INUEXTERN VOID HaliIrq13();
 INUEXTERN VOID HaliIrq14();
 INUEXTERN VOID HaliIrq15();
 
+INUEXTERN VOID HaliDispatch();
+
 
 VOID HalInitialize()
 {
@@ -147,26 +152,26 @@ BOOLEAN HalTryEnterLock(INUVOLATILE BOOLEAN* monitor)
 
 void HalAssert(const char* file, const char* func, const char* line)
 {
-    FwPrint(file);
-    FwPrint(func);
-    FwPrint(line);
+    FwiPrint(file);
+    FwiPrint(func);
+    FwiPrint(line);
     asm ("cli");
     asm ("hlt");
 }
 
 VOID HalBugcheck(const CHAR* message, const CHAR* file, const CHAR* func, const CHAR* line)
 {
-    FwPrint("Assertion failed! : ");
+    FwiPrint("Assertion failed! : ");
     if (message != NULL)
     {
-        FwPrint(message);
+        FwiPrint(message);
     }
-    FwPrint("\r\nFile: ");
-    FwPrint(file);
-    FwPrint("\r\nFunction: ");
-    FwPrint(func);
-    FwPrint("\r\nLine: ");
-    FwPrint(line);
+    FwiPrint("\r\nFile: ");
+    FwiPrint(file);
+    FwiPrint("\r\nFunction: ");
+    FwiPrint(func);
+    FwiPrint("\r\nLine: ");
+    FwiPrint(line);
     asm ("cli");
     asm ("hlt");
 }
@@ -457,10 +462,8 @@ VOID HalModifyFrame(VOID* self, VOID* addressSpace, VOID* newStack, VOID* func, 
         struct HaliX86Cr0 cr0 = {0};
 
         UINT32* stack = newStack;
-
         stack[-2] = (UINT32)arg;
         stack[-1] = (UINT32)func;
-
         stack -= 3;
 
         cr0.pe = TRUE;
@@ -540,32 +543,54 @@ void HaliX86SetGdtEntry(const INT32 index, const UINT32 base, const UINT32 limit
     FwGdtEntryTable[index].granularity = FwGdtEntryTable[index].granularity | (granularity & 0xF0);
 }
 
+VOID HaliX86FixupFrame(VOID* frame, enum PROCESS_MODE mode)
+{
+    INU_ASSERT(frame);
+
+    struct HaliX86InterruptFrame* descriptor = frame;
+    if (mode == PROCESS_KERNEL)
+    {
+        descriptor->esp += 20;
+    }
+    else if (mode == PROCESS_USER)
+    {
+        descriptor->esp += 28;
+    }
+    else
+    {
+        INU_BUGCHECK("Bad process type!");
+    }
+}
+
 UINTPTR HaliIsrHandler(struct HaliX86InterruptFrame* descriptor)
 {
+    enum PROCESS_MODE previousMode = PROCESS_UNKNOWN;
+    CONTROL_LEVEL previousControl = CONTROL_LEVEL_DISPATCH;
+
     INU_BUGCHECK("Exception!");
+
+    previousControl = FwGetControlLevel();
+    previousMode = FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
+    FwSetInterruptFrame(descriptor);
+    HaliX86FixupFrame(descriptor,previousMode);
+
+    FwRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
 
     if (HalGlobalInterruptsHandlers[descriptor->int_no] != NULL)
     {
-        CONTROL_LEVEL previousControl = FwGetControlLevel();
-        FwGetCurrentCpuDescriptor()->interruptFrame = descriptor;
-
-        FwRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
-
         HalGlobalInterruptsHandlers[descriptor->int_no](descriptor);
-
-        FwGetCurrentCpuDescriptor()->interruptFrame = NULL;
-        FwRaiseControlLevel(previousControl);
+        FwSetInterruptFrame(NULL);
     }
 
+    FwRaiseControlLevel(previousControl);
+
+    INU_ASSERT(previousMode != PROCESS_UNKNOWN);
     INU_ASSERT(FwGetCurrentCpuDescriptor()->schedulableObject != NULL);
     INU_ASSERT(FwGetCurrentCpuDescriptor()->schedulableObject->owner != NULL);
 
-    FwSignalEoi(descriptor->int_no);
-
     if (FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode == PROCESS_KERNEL)
     {
-        descriptor->esp += 24;
-
+        descriptor->esp -= 12;
         UINT32* setter = (UINT32*)descriptor->esp;
 
         setter[0] = descriptor->eip;
@@ -584,39 +609,41 @@ UINTPTR HaliIsrHandler(struct HaliX86InterruptFrame* descriptor)
 UINTPTR HaliIrqHandler(struct HaliX86InterruptFrame* descriptor)
 {
     enum PROCESS_MODE previousMode = PROCESS_UNKNOWN;
+    CONTROL_LEVEL previousControl = CONTROL_LEVEL_DISPATCH;
+    BOOLEAN signalEoi = FALSE;
+
+    if (descriptor->error_code == X86_HAL_SOFTWARE_DISPATCH)
+    {
+        signalEoi = FALSE;
+    }
+    else
+    {
+        signalEoi = TRUE;
+    }
+
+    previousControl = FwGetControlLevel();
+    previousMode = FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
+    FwSetInterruptFrame(descriptor);
+    HaliX86FixupFrame(descriptor,previousMode);
+
+    FwRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
 
     if (HalGlobalInterruptsHandlers[descriptor->int_no] != NULL)
     {
-        CONTROL_LEVEL previousControl = FwGetControlLevel();
-        FwGetCurrentCpuDescriptor()->interruptFrame = descriptor;
-        previousMode = FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
-
-        if (previousMode == PROCESS_KERNEL)
-        {
-            descriptor->esp += 20;
-        }
-        else if (previousMode == PROCESS_USER)
-        {
-            descriptor->esp += 28;
-        }
-        else
-        {
-            INU_BUGCHECK("Bad process type!");
-        }
-
-        FwRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
-
         HalGlobalInterruptsHandlers[descriptor->int_no](descriptor);
-
-        FwGetCurrentCpuDescriptor()->interruptFrame = NULL;
-        FwRaiseControlLevel(previousControl);
+        FwSetInterruptFrame(NULL);
     }
+
+    FwRaiseControlLevel(previousControl);
 
     INU_ASSERT(previousMode != PROCESS_UNKNOWN);
     INU_ASSERT(FwGetCurrentCpuDescriptor()->schedulableObject != NULL);
     INU_ASSERT(FwGetCurrentCpuDescriptor()->schedulableObject->owner != NULL);
 
-    FwSignalEoi(descriptor->int_no);
+    if (signalEoi)
+    {
+        FwSignalEoi(descriptor->int_no);
+    }
 
     if (FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode == PROCESS_KERNEL)
     {
@@ -704,4 +731,6 @@ VOID HaliX86InitializeInterrupts()
     HaliX86IntSetIsr(44, (UINT32)HaliIrq12,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
     HaliX86IntSetIsr(45, (UINT32)HaliIrq13,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
     HaliX86IntSetIsr(46, (UINT32)HaliIrq14,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+
+    HaliX86IntSetIsr(X86_HAL_DISPATCH,(UINT32)HaliDispatch,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
 }

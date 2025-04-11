@@ -56,3 +56,4 @@ VOID FwiPicSendEoi(UINTPTR irq);
 VOID FwiPicRemap(UINTPTR firstOffset, UINTPTR secondOffset);
 VOID FwiPicDisable(VOID);
 UINT16 FwiPicGetIrqIndex(VOID);
+VOID FwiPrint(const char* message);

@@ -1,4 +1,4 @@
 
-if (${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686")
+if (${LTOS_PROCESSOR} STREQUAL "i386")
     add_subdirectory(ia32)
 endif ()

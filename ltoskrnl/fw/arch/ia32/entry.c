@@ -5,29 +5,33 @@
 #include <fw/fw.h>
 #include <mm/mm.h>
 #include <ps/cpu.h>
+#include <ps/crit.h>
 #include <rtl/rtl.h>
 
 #include "fwi.h"
+#include "mb.h"
 
 #define FW_TIMER_INTERRUPT_INDEX 0x20
 #define FW_SLEEP_PORT 0x80
 #define FW_CPU_COUNT 1
+#define FW_YIELD_INDEX 0xFE
 
 INUGLOBAL struct PROCESSOR_DESCRIPTOR FwGlobalProcessorsDescriptors[FW_CPU_COUNT];
 INUGLOBAL UINTPTR FwGlobalClock;
 INUGLOBAL TRAP_HANDLER FwGlobalSchedulerHandler;
 INUGLOBAL struct FwX86TextModeState FwGlobalTextModeState;
+INUGLOBAL struct CRITICAL_SECTION FwGlobalPrintLock;
 
-VOID FwInitialize(VOID)
+VOID FwInitialize(UINTPTR magic, UINTPTR ptr)
 {
     VOID* memStart = (VOID*)4194304;
     UINTPTR memLength = 4194304*4;
 
     HalInitialize();
+    MmInitialize(memStart,memLength);
     FwiPicInitialize();
     FwiPitInitialize();
     FwiInitializeDisplay();
-    MmInitialize(memStart,memLength);
     HalSetInterrupt(FwiClockHandler,FW_TIMER_INTERRUPT_INDEX,CONTROL_LEVEL_TIMER);
     PsInitialize();
 
@@ -40,6 +44,20 @@ VOID FwInitialize(VOID)
 VOID FwSetScheduler(TRAP_HANDLER handler)
 {
     FwGlobalSchedulerHandler = handler;
+    HalSetInterrupt(handler,FW_YIELD_INDEX,CONTROL_LEVEL_DISPATCH);
+}
+
+VOID FwYieldToDispatch()
+{
+    if (FwGlobalSchedulerHandler != NULL)
+    {
+        __asm__("int %0\n" : : "N"((FW_YIELD_INDEX)) : "cc", "memory");
+    }
+}
+
+VOID FwSetInterruptFrame(VOID* frame)
+{
+    FwGetCurrentCpuDescriptor()->interruptFrame = frame;
 }
 
 UINTPTR FwGetCpuIndex()
@@ -331,10 +349,11 @@ char *FwpUlongToString(UINT64 value, char *string, int radix)
     return baseStr;
 }
 
-
 VOID FwDebugPrint(const char *format, ...)
 {
-    FwPrint("[DEBUG] ");
+    CriticalSectionEnter(&FwGlobalPrintLock);
+
+    FwiPrint("[DEBUG] ");
     va_list parameters;
     va_start(parameters, format);
 
@@ -435,6 +454,9 @@ VOID FwDebugPrint(const char *format, ...)
     }
 
     va_end(parameters);
+
+    CriticalSectionExit(&FwGlobalPrintLock);
+
     return;
 }
 
@@ -458,7 +480,7 @@ VOID FwpElbow(const char *string)
     }
 }
 
-VOID FwPrint(const char *string)
+VOID FwiPrint(const char *string)
 {
     const UINTPTR stringLength = strlen(string);
     for (int i = 0; i < stringLength; ++i)
@@ -474,6 +496,8 @@ VOID FwPutCharacter(CHAR wchar)
 
 VOID FwiInitializeDisplay()
 {
+    CriticalSectionInitialize(&FwGlobalPrintLock);
+
     for (UINTPTR i = 0; i < 25; ++i)
     {
         for (UINTPTR q = 0; q < 80; ++q)

@@ -236,3 +236,4 @@ VOID HaliX86IntSetIsr(BYTE index, UINT32 base, UINT16 selector, BYTE flags);
 VOID HaliX86LoadIdtPointer(struct HaliX86IdtPointer* ptr);
 VOID HaliX86SetGdtEntry(const INT32 index, const UINT32 base, const UINT32 limit, const BYTE access,
                         const BYTE granularity);
+VOID HaliX86FixupFrame(VOID* frame, enum PROCESS_MODE mode);

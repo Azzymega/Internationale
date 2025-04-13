@@ -5,20 +5,15 @@
 #include <mm/mm.h>
 #include <ps/ps.h>
 
-VOID hell()
-{
-    while (TRUE);
-}
 
 VOID KeEntry()
 {
+    struct THREAD* thread;
+    PsGetCurrentThread(&thread);
+
     while (TRUE)
     {
-        struct THREAD* thread;
-        PsGetCurrentThread(&thread);
-
         FwDebugPrint("Time is %i ms\r\n",FwClock());
-
-        FwYieldToDispatch();
+        //FwYieldToDispatch();
     }
 }

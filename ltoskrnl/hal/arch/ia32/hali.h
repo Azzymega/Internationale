@@ -1,6 +1,30 @@
 #pragma once
 #include <ltbase.h>
 
+#define HALI_GDT_KERNEL_MODE 0
+#define HALI_GDT_USER_MODE 3
+
+#define HALI_GDT_READ_ONLY 0
+#define HALI_GDT_READ_WRITE 1
+
+#define HALI_GDT_CODE_SEGMENT 1
+#define HALI_GDT_DATA_SEGMENT 0
+
+#define HALI_GDT_TSS 0
+#define HALI_GDT_SEGMENT 1
+
+#define HALI_GDT_PAGE_GRANULARITY 1
+#define HALI_GDT_BYTE_GRANULARITY 0
+
+#define HALI_32BIT_SEGMENT 1
+#define HALI_16BIT_SEGMENT 0
+
+#define HALI_TSS_16TSS_AVL 0x1
+#define HALI_TSS_16TSS_BUSY 0x3
+#define HALI_TSS_LDT 0x02
+#define HALI_TSS_32TSS_AVL 0x9
+#define HALI_TSS_32TSS_BUSY 0xB
+
 struct INUPACKED HaliX86IdtPointer
 {
     UINT16 limit;
@@ -18,81 +42,81 @@ struct INUPACKED HaliX86InterruptDescriptor
 
 struct INUPACKED HaliX86InterruptFrame
 {
-    uint32_t dr7;
-    uint32_t dr6;
-    uint32_t dr3;
-    uint32_t dr2;
-    uint32_t dr1;
-    uint32_t dr0;
+    UINT32 dr7;
+    UINT32 dr6;
+    UINT32 dr3;
+    UINT32 dr2;
+    UINT32 dr1;
+    UINT32 dr0;
 
-    uint32_t cr4;
-    uint32_t cr3;
-    uint32_t cr2;
-    uint32_t cr0;
+    UINT32 cr4;
+    UINT32 cr3;
+    UINT32 cr2;
+    UINT32 cr0;
 
-    uint32_t gs;
-    uint32_t fs;
-    uint32_t es;
-    uint32_t ds;
+    UINT32 gs;
+    UINT32 fs;
+    UINT32 es;
+    UINT32 ds;
 
     uint8_t fpu[108];
 
-    uint32_t edi;
-    uint32_t esi;
-    uint32_t ebp;
-    uint32_t ebx;
-    uint32_t edx;
-    uint32_t ecx;
-    uint32_t eax;
-    uint32_t esp;
+    UINT32 edi;
+    UINT32 esi;
+    UINT32 ebp;
+    UINT32 ebx;
+    UINT32 edx;
+    UINT32 ecx;
+    UINT32 eax;
+    UINT32 esp;
 
-    uint32_t int_no;
-    uint32_t error_code;
+    UINT32 int_no;
+    UINT32 error_code;
 
-    uint32_t eip;
-    uint32_t cs;
-    uint32_t eflags;
+    UINT32 eip;
+    UINT32 cs;
+    UINT32 eflags;
 
-    uint32_t user_esp;
-    uint32_t ss;
+    UINT32 user_esp;
+    UINT32 ss;
 };
 
 struct INUPACKED Halix86InterruptKernelFrame
 {
-    uint32_t dr7;
-    uint32_t dr6;
-    uint32_t dr3;
-    uint32_t dr2;
-    uint32_t dr1;
-    uint32_t dr0;
+    UINT32 dr7;
+    UINT32 dr6;
+    UINT32 dr3;
+    UINT32 dr2;
+    UINT32 dr1;
+    UINT32 dr0;
 
-    uint32_t cr4;
-    uint32_t cr3;
-    uint32_t cr2;
-    uint32_t cr0;
+    UINT32 cr4;
+    UINT32 cr3;
+    UINT32 cr2;
+    UINT32 cr0;
 
-    uint32_t gs;
-    uint32_t fs;
-    uint32_t es;
-    uint32_t ds;
+    UINT32 gs;
+    UINT32 fs;
+    UINT32 es;
+    UINT32 ds;
 
     uint8_t fpu[108];
 
-    uint32_t edi;
-    uint32_t esi;
-    uint32_t ebp;
-    uint32_t ebx;
-    uint32_t edx;
-    uint32_t ecx;
-    uint32_t eax;
-    uint32_t esp;
+    UINT32 edi;
+    UINT32 esi;
+    UINT32 ebp;
+    UINT32 ebx;
+    UINT32 edx;
+    UINT32 ecx;
+    UINT32 eax;
+    UINT32 esp;
 
-    uint32_t int_no;
-    uint32_t error_code;
+    UINT32 int_no;
+    UINT32 error_code;
 
-    uint32_t eip;
-    uint32_t cs;
-    uint32_t eflags;
+    UINT32 eip;
+    UINT32 cs;
+    UINT32 eflags;
 };
 
 struct INUPACKED HaliX86PageDirectoryEntry
@@ -181,12 +205,47 @@ struct INUPACKED HaliX86Cr4
 
 struct INUPACKED HaliX86GdtEntry
 {
-    UINT16 limiteLow;
-    UINT16 baseLow;
-    BYTE baseMiddle;
-    BYTE access;
-    BYTE granularity;
-    BYTE baseHigh;
+    UINT16 lowLimit;
+    UINT16 lowBase;
+    BYTE midBase;
+
+    BYTE accessed : 1;
+    BYTE rw : 1;
+    BYTE direction : 1;
+    BYTE executable : 1;
+    BYTE isSegment : 1;
+    BYTE privilegeLevel : 2;
+    BYTE present : 1;
+
+
+    BYTE highLimit : 4;
+    BYTE avl : 1;
+    BYTE reserved : 1;
+    BYTE size : 1;
+    BYTE pageGranularity : 1;
+
+    BYTE highBase;
+};
+
+struct INUPACKED HaliX86TssEntry
+{
+    UINT16 lowLimit;
+    UINT16 lowBase;
+    BYTE midBase;
+
+    BYTE type : 4;
+    BYTE isSegment : 1;
+    BYTE privilegeLevel : 2;
+    BYTE present : 1;
+
+    BYTE highLimit : 4;
+
+    BYTE avl : 1;
+    BYTE reserved : 1;
+    BYTE size : 1;
+    BYTE pageGranularity : 1;
+
+    BYTE highBase;
 };
 
 struct INUPACKED HaliX86GdtPointer
@@ -226,6 +285,7 @@ struct INUPACKED HaliX86Tss
     UINT16 iomap;
 };
 
+
 UINTPTR HaliIsrHandler(struct HaliX86InterruptFrame* descriptor);
 UINTPTR HaliIrqHandler(struct HaliX86InterruptFrame* descriptor);
 
@@ -234,6 +294,7 @@ VOID HaliX86InitializeInterrupts();
 VOID HaliX86InitializeIdt();
 VOID HaliX86IntSetIsr(BYTE index, UINT32 base, UINT16 selector, BYTE flags);
 VOID HaliX86LoadIdtPointer(struct HaliX86IdtPointer* ptr);
-VOID HaliX86SetGdtEntry(const INT32 index, const UINT32 base, const UINT32 limit, const BYTE access,
-                        const BYTE granularity);
+VOID HaliX86LoadGdtEntry(UINT32 index, UINT32 base, UINT32 limit, BYTE rw, BYTE executable, BYTE isSegment,
+                         BYTE privilegeLevel, BYTE granularity, BYTE sizeType);
+VOID HaliX86LoadTssEntry(UINT32 index, UINT32 base, UINT32 limit, BYTE tssType, BYTE privilegeLevel);
 VOID HaliX86FixupFrame(VOID* frame, enum PROCESS_MODE mode);

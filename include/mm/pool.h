@@ -18,9 +18,9 @@ enum MEMORY_POOL_TYPES {
 };
 
 enum MEMORY_POOL_BLOCK_TYPES {
-    MmPoolBlockUnknown,
-    MmPoolBlockSmall,
-    MmPoolBlockLarge
+    POOL_BLOCK_UNKNOWN,
+    POOL_BLOCK_SMALL,
+    POOL_BLOCK_LARGE
 };
 
 struct MEMORY_POOL_BLOCK

@@ -2,10 +2,10 @@ OUTPUT_FORMAT(elf32-i386)
 
 ENTRY(FwBoot)
 
+
 SECTIONS
 {
-
-	. = 1M;
+    . = 1M;
 
     .interp :
     {

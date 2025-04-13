@@ -50,7 +50,7 @@ VOID MemoryPoolFillBuffer(struct MEMORY_POOL *self, UINTPTR pageCount)
     {
         struct MEMORY_POOL_BLOCK* block = address;
         block->size = self->blockSize;
-        block->type = MmPoolBlockSmall;
+        block->type = POOL_BLOCK_SMALL;
 
         block->next = self->list;
         self->list = block;
@@ -93,12 +93,12 @@ VOID MemoryHeapFree(struct MEMORY_HEAP *self, VOID *ptr)
         return;
     }
     const struct MEMORY_POOL_BLOCK* block = ptr-sizeof(struct MEMORY_POOL_BLOCK);
-    if (block->type == MmPoolBlockSmall)
+    if (block->type == POOL_BLOCK_SMALL)
     {
         const INTPTR index = MemoryHeapFindPoolIndex(self,block->size);
         MemoryPoolFree(&self->pools[index],ptr);
     }
-    else if (block->type == MmPoolBlockLarge)
+    else if (block->type == POOL_BLOCK_LARGE)
     {
         MmFreePhysical(ptr,block->size/HalGetPageSize());
     }
@@ -114,7 +114,7 @@ VOID * MemoryHeapAllocBig(struct MEMORY_HEAP *self, UINTPTR byteCount)
     struct MEMORY_POOL_BLOCK* block = MmAllocatePhysical(pageCount);
     VOID* mem = block;
     block->size = pageCount*HalGetPageSize();
-    block->type = MmPoolBlockLarge;
+    block->type = POOL_BLOCK_LARGE;
     return mem+sizeof(struct MEMORY_POOL_BLOCK);
 }
 

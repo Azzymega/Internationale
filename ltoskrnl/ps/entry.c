@@ -18,7 +18,7 @@ INUGLOBAL struct VAS_DESCRIPTOR PsGlobalKernelVas;
 VOID PsiInitializeKernelProcess()
 {
     VasDescriptorInitialize(&PsGlobalKernelVas);
-    VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)4096,(VOID*)4096,2147483648,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
+    VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)0,(VOID*)4096,2147483648,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
     ProcessInitialize(&PsGlobalKernelProcess,&PsGlobalKernelVas,PROCESS_KERNEL);
 }
 

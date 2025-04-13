@@ -17,6 +17,11 @@ VOID RtlSetMemory(VOID *destination, UINTPTR target, UINTPTR length)
     HalSetMemory(destination, target, length);
 }
 
+VOID RtlZeroMemory(VOID* destination, UINTPTR legnth)
+{
+    RtlSetMemory(destination,0,legnth);
+}
+
 void * memset(void *dest, int value, size_t length)
 {
     RtlSetMemory(dest,value,length);

@@ -21,5 +21,5 @@ UINTPTR FwGetCpuIndex();
 struct PROCESSOR_DESCRIPTOR* FwGetCurrentCpuDescriptor();
 
 VOID FwRaiseControlLevel(CONTROL_LEVEL level);
-VOID FwSignalEoi(UINTPTR irqIndex);
+VOID FwAcknowledgeInterrupt(UINTPTR index);
 CONTROL_LEVEL FwGetControlLevel();

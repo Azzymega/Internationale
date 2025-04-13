@@ -64,7 +64,6 @@ void _Kassert( char const * const );
 #define INUINLINE __attribute__((always_inline))
 #define INUCPUCONTEXT
 
-
 #define NULL ((void*)0)
 #define TRUE 1
 #define FALSE 0

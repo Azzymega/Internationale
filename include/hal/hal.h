@@ -16,10 +16,11 @@ VOID HalBugcheck(const CHAR *message, const CHAR *file, const CHAR* func, const 
 
 #define INU_BUGCHECK(message) HalBugcheck(message,__FILE__,__func__,__symbol2string( __LINE__ ));
 #define INU_ASSERT(message) assert(message)
+#define INU_STATIC_ASSERT(target) _Static_assert(target)
 
 VOID HalCopyMemory(VOID* destination, VOID* source, UINTPTR length);
 VOID HalSetMemory(VOID* destination, UINTPTR target, UINTPTR length);
-VOID HalMoveMemory(VOID *restrict destination, const VOID *restrict source, const UINTPTR length);
+VOID HalMoveMemory(VOID *restrict destination, const VOID *restrict source, UINTPTR length);
 VOID HalSaveState(struct THREAD* thread, VOID* state);
 VOID HalSwitchState(struct THREAD* target, VOID* state);
 

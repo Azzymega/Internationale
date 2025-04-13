@@ -35,13 +35,41 @@
 #define PIC_READ_IRR 0x0a
 #define PIC_READ_ISR 0x0b
 
+#define FW_TIMER_INTERRUPT_INDEX 0x20
+#define FW_SLEEP_PORT 0x80
+#define FW_CPU_COUNT 1
+#define FW_YIELD_INDEX 0xFE
+#define PAL_BIOS_CALL_BUFFER 0xFFF0
+
 #define FwX86TextModeAddress ((INT16*)0xb8000)
+
+struct INUPACKED PaliX86BiosCallFrame
+{
+    UINT32 edi;
+    UINT32 esi;
+    UINT32 ebp;
+    UINT32 esp;
+    UINT32 ebx;
+    UINT32 edx;
+    UINT32 ecx;
+    UINT32 eax;
+
+    UINT16 gs;
+    UINT16 fs;
+    UINT16 es;
+    UINT16 ds;
+
+    UINT32 eflags;
+};
 
 struct INUPACKED FwX86TextModeState
 {
     UINT16 x;
     UINT16 y;
 };
+
+VOID PaliX86BiosCall(BYTE interruptIndex, struct PaliX86BiosCallFrame* frame);
+VOID PaliX86BiosCallsInitialize();
 
 VOID FwiInitializeDisplay();
 VOID FwiClockHandler(VOID* handler);

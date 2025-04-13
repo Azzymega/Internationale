@@ -4,6 +4,7 @@
 VOID RtlCopyMemory(VOID *destination, VOID *source, UINTPTR length);
 VOID RtlMoveMemory(VOID *destination, VOID *source, UINTPTR length);
 VOID RtlSetMemory(VOID *destination, UINTPTR target, UINTPTR length);
+VOID RtlZeroMemory(VOID *destination, UINTPTR legnth);
 
 void* memset(void* dest, int value, size_t length);
 size_t strlen(const char *string);

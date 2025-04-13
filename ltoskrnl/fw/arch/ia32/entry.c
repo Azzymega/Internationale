@@ -11,40 +11,36 @@
 #include "fwi.h"
 #include "mb.h"
 
-#define FW_TIMER_INTERRUPT_INDEX 0x20
-#define FW_SLEEP_PORT 0x80
-#define FW_CPU_COUNT 1
-#define FW_YIELD_INDEX 0xFE
-
 INUGLOBAL struct PROCESSOR_DESCRIPTOR FwGlobalProcessorsDescriptors[FW_CPU_COUNT];
 INUGLOBAL UINTPTR FwGlobalClock;
 INUGLOBAL TRAP_HANDLER FwGlobalSchedulerHandler;
 INUGLOBAL struct FwX86TextModeState FwGlobalTextModeState;
 INUGLOBAL struct CRITICAL_SECTION FwGlobalPrintLock;
 
+
 VOID FwInitialize(UINTPTR magic, UINTPTR ptr)
 {
     VOID* memStart = (VOID*)4194304;
-    UINTPTR memLength = 4194304*4;
+    UINTPTR memLength = 4194304 * 4;
 
     HalInitialize();
-    MmInitialize(memStart,memLength);
+    MmInitialize(memStart, memLength);
+    PaliX86BiosCallsInitialize();
     FwiPicInitialize();
     FwiPitInitialize();
     FwiInitializeDisplay();
-    HalSetInterrupt(FwiClockHandler,FW_TIMER_INTERRUPT_INDEX,CONTROL_LEVEL_TIMER);
+    HalSetInterrupt(FwiClockHandler,FW_TIMER_INTERRUPT_INDEX, CONTROL_LEVEL_TIMER);
     PsInitialize();
 
     while (TRUE)
     {
-
     }
 }
 
 VOID FwSetScheduler(TRAP_HANDLER handler)
 {
     FwGlobalSchedulerHandler = handler;
-    HalSetInterrupt(handler,FW_YIELD_INDEX,CONTROL_LEVEL_DISPATCH);
+    HalSetInterrupt(handler,FW_YIELD_INDEX, CONTROL_LEVEL_DISPATCH);
 }
 
 VOID FwYieldToDispatch()
@@ -84,18 +80,18 @@ VOID FwRaiseControlLevel(UINTPTR level)
 
         if (target < level)
         {
-            FwiPicMaskIrq(i-32);
+            FwiPicMaskIrq(i - 32);
         }
         else
         {
-            FwiPicUnmaskIrq(i-32);
+            FwiPicUnmaskIrq(i - 32);
         }
     }
 }
 
-VOID FwSignalEoi(UINTPTR irqIndex)
+VOID FwAcknowledgeInterrupt(UINTPTR index)
 {
-    FwiPicSendEoi(irqIndex);
+    FwiPicSendEoi(index-32);
 }
 
 CONTROL_LEVEL FwGetControlLevel()
@@ -114,7 +110,6 @@ UINTPTR FwClock()
 }
 
 
-
 VOID FwiClockHandler(VOID* handler)
 {
     FwGlobalClock += 10;
@@ -125,37 +120,44 @@ VOID FwiClockHandler(VOID* handler)
     }
 }
 
-INUSTATIC VOID outb(UINT32 port, BYTE data) {
+INUSTATIC VOID outb(UINT32 port, BYTE data)
+{
     __asm__ volatile("outb %b0, %w1" : : "a" (data), "Nd" (port));
 }
 
-INUSTATIC BYTE inb(UINT32 port) {
+INUSTATIC BYTE inb(UINT32 port)
+{
     BYTE data;
     __asm__ volatile("inb %w1, %b0" : "=a" (data) : "Nd" (port));
     return data;
 }
 
-INUSTATIC VOID outw(UINT32 port, UINT16 data) {
+INUSTATIC VOID outw(UINT32 port, UINT16 data)
+{
     __asm__ volatile("outw %w0, %w1" : : "a" (data), "Nd" (port));
 }
 
-INUSTATIC UINT16 inw(UINT32 port) {
+INUSTATIC UINT16 inw(UINT32 port)
+{
     UINT16 data;
     __asm__ volatile("inw %w1, %w0" : "=a" (data) : "Nd" (port));
     return data;
 }
 
-INUSTATIC VOID outdw(UINT32 port, UINT32 data) {
+INUSTATIC VOID outdw(UINT32 port, UINT32 data)
+{
     __asm__ volatile("outl %0, %w1" : : "a" (data), "Nd" (port));
 }
 
-INUSTATIC UINT32 indw(UINT32 port) {
+INUSTATIC UINT32 indw(UINT32 port)
+{
     UINT32 data;
     __asm__ volatile("inl %w1, %0" : "=a" (data) : "Nd" (port));
     return data;
 }
 
-VOID FwiPitInitialize(VOID) {
+VOID FwiPitInitialize(VOID)
+{
     const UINT32 hz = 100;
     const UINT32 divisor = PIT_FREQUENCY / hz;
     outb(PIT_CMD_PORT, PIT_BINARY | PIT_INT_TIMER | PIT_FULL_RW | PIT_ZERO_COUNTER);
@@ -180,29 +182,35 @@ UINT16 FwiPicGetIsr(VOID)
     return PicGetIrqInfo(PIC_READ_ISR);
 }
 
-VOID FwiPicInitialize(VOID) {
-    FwiPicRemap(0x20,0x28);
+VOID FwiPicInitialize(VOID)
+{
+    FwiPicRemap(0x20, 0x28);
     for (int i = 0; i < 15; ++i)
     {
         FwiPicUnmaskIrq(i);
     }
 }
 
-BOOLEAN FwiPicCheckInterrupt(const UINTPTR irq) {
+BOOLEAN FwiPicCheckInterrupt(const UINTPTR irq)
+{
     const UINT16 data = FwiPicGetIsr();
-    if (data & (1 << irq)) {
+    if (data & (1 << irq))
+    {
         return TRUE;
     }
     return FALSE;
 }
 
-VOID FwiPicMaskIrq(UINTPTR irq) {
+VOID FwiPicMaskIrq(UINTPTR irq)
+{
     UINT16 port = 0;
 
-    if(irq < 8) {
+    if (irq < 8)
+    {
         port = PIC1_DATA;
     }
-    else {
+    else
+    {
         port = PIC2_DATA;
         irq -= 8;
     }
@@ -211,13 +219,16 @@ VOID FwiPicMaskIrq(UINTPTR irq) {
     outb(port, value);
 }
 
-VOID FwiPicUnmaskIrq(UINTPTR irq) {
+VOID FwiPicUnmaskIrq(UINTPTR irq)
+{
     UINT16 port = 0;
 
-    if(irq < 8) {
+    if (irq < 8)
+    {
         port = PIC1_DATA;
     }
-    else {
+    else
+    {
         port = PIC2_DATA;
         irq -= 8;
     }
@@ -226,20 +237,25 @@ VOID FwiPicUnmaskIrq(UINTPTR irq) {
     outb(port, value);
 }
 
-VOID FwiPicSendEoi(const UINTPTR irq) {
-    if(irq >= 8) {
+VOID FwiPicSendEoi(const UINTPTR irq)
+{
+    if (irq >= 8)
+    {
         outb(PIC2_COMMAND,PIC_EOI);
     }
     outb(PIC1_COMMAND,PIC_EOI);
 }
 
-VOID PicIoWait() {
-    for (int i = 0; i < 10; ++i) {
-        outb(FW_SLEEP_PORT,0);
+VOID PicIoWait()
+{
+    for (int i = 0; i < 10; ++i)
+    {
+        outb(FW_SLEEP_PORT, 0);
     }
 }
 
-VOID FwiPicRemap(const UINTPTR firstOffset, const UINTPTR secondOffset) {
+VOID FwiPicRemap(const UINTPTR firstOffset, const UINTPTR secondOffset)
+{
     const BYTE firstMask = inb(PIC1_DATA);
     const BYTE secondMask = inb(PIC2_DATA);
 
@@ -264,12 +280,14 @@ VOID FwiPicRemap(const UINTPTR firstOffset, const UINTPTR secondOffset) {
     outb(PIC2_DATA, secondMask);
 }
 
-VOID FwiPicDisable() {
+VOID FwiPicDisable()
+{
     outb(PIC1_DATA, 0xff);
     outb(PIC2_DATA, 0xff);
 }
 
-UINT16 FwiPicGetIrqIndex() {
+UINT16 FwiPicGetIrqIndex()
+{
     return FwiPicGetIsr();
 }
 
@@ -289,12 +307,12 @@ VOID FwpScrollTextModeScreen()
 
 INT32 FwpPrintCharacterTextModeScreen(char value)
 {
-    Start:
-        if (FwGlobalTextModeState.x >= 80)
-        {
-            FwpScrollTextModeScreen();
-            goto Start;
-        }
+Start:
+    if (FwGlobalTextModeState.x >= 80)
+    {
+        FwpScrollTextModeScreen();
+        goto Start;
+    }
 
     if (value == '\r')
     {
@@ -313,18 +331,18 @@ INT32 FwpPrintCharacterTextModeScreen(char value)
     return value;
 }
 
-static BOOLEAN FwpPrint(const char *data, UINTPTR length)
+static BOOLEAN FwpPrint(const char* data, UINTPTR length)
 {
-    const unsigned char *bytes = (const unsigned char *) data;
+    const unsigned char* bytes = (const unsigned char*)data;
     for (UINTPTR i = 0; i < length; i++)
         if (FwpPrintCharacterTextModeScreen(bytes[i]) == -1)
             return FALSE;
     return TRUE;
 }
 
-char *FwpUlongToString(UINT64 value, char *string, int radix)
+char* FwpUlongToString(UINT64 value, char* string, int radix)
 {
-    char *baseStr = string;
+    char* baseStr = string;
     unsigned char index;
     char buffer[32];
 
@@ -349,7 +367,7 @@ char *FwpUlongToString(UINT64 value, char *string, int radix)
     return baseStr;
 }
 
-VOID FwDebugPrint(const char *format, ...)
+VOID FwDebugPrint(const char* format, ...)
 {
     CriticalSectionEnter(&FwGlobalPrintLock);
 
@@ -381,12 +399,12 @@ VOID FwDebugPrint(const char *format, ...)
             continue;
         }
 
-        const char *format_begun_at = format++;
+        const char* format_begun_at = format++;
 
         if (*format == 'c')
         {
             format++;
-            char c = (char) va_arg(parameters, int);
+            char c = (char)va_arg(parameters, int);
             if (!maxrem)
             {
                 return;
@@ -398,7 +416,7 @@ VOID FwDebugPrint(const char *format, ...)
         else if (*format == 's')
         {
             format++;
-            const char *str = va_arg(parameters, const char*);
+            const char* str = va_arg(parameters, const char*);
             UINTPTR len = strlen(str);
             if (maxrem < len)
             {
@@ -413,7 +431,7 @@ VOID FwDebugPrint(const char *format, ...)
             format++;
             int value = va_arg(parameters, int);
             char buff[100];
-            char *str = itoa(value, buff, 10);
+            char* str = itoa(value, buff, 10);
             UINTPTR len = strlen(str);
             if (maxrem < len)
             {
@@ -428,7 +446,7 @@ VOID FwDebugPrint(const char *format, ...)
             format++;
             int value = va_arg(parameters, int);
             char buff[100];
-            char *str = FwpUlongToString(value, buff, 16);
+            char* str = FwpUlongToString(value, buff, 16);
             UINTPTR len = strlen(str);
             if (maxrem < len)
             {
@@ -460,7 +478,7 @@ VOID FwDebugPrint(const char *format, ...)
     return;
 }
 
-VOID FwpElbow(const char *string)
+VOID FwpElbow(const char* string)
 {
     for (UINTPTR i = 0; i < 25; ++i)
     {
@@ -480,7 +498,7 @@ VOID FwpElbow(const char *string)
     }
 }
 
-VOID FwiPrint(const char *string)
+VOID FwiPrint(const char* string)
 {
     const UINTPTR stringLength = strlen(string);
     for (int i = 0; i < stringLength; ++i)

@@ -22,8 +22,9 @@
 #define X86_HAL_PAGE_SIZE 4096
 #define X86_HAL_INTERRUPT_GATE 0x8E
 #define X86_HAL_TRAP_GATE 0x8F
-#define X86_HAL_CODE_SEGMENT 0x08
-#define X86_HAL_DESCRIPTOR_COUNT 8
+#define X86_HAL_KERNEL_CODE_SEGMENT 0x08
+#define X86_HAL_KERNEL_DATA_SEGMENT 0x10
+#define X86_HAL_DESCRIPTOR_COUNT 16
 
 #define X86_HAL_DE_INDEX 0
 #define X86_HAL_DB_INDEX 1
@@ -98,7 +99,6 @@ INUEXTERN VOID HaliIrq14();
 INUEXTERN VOID HaliIrq15();
 
 INUEXTERN VOID HaliDispatch();
-
 
 VOID HalInitialize()
 {
@@ -178,44 +178,15 @@ VOID HalBugcheck(const CHAR* message, const CHAR* file, const CHAR* func, const 
 
 VOID HalCopyMemory(VOID* destination, VOID* source, UINTPTR length)
 {
-    unsigned char* d = destination;
-    const unsigned char* s = source;
-
-    if ((((uintptr_t)d ^ (uintptr_t)s) & 3))
-    {
-        while (length--)
-            *d++ = *s++;
-    }
-
-    while (((uintptr_t)d & 3) && length)
-    {
-        *d++ = *s++;
-        length--;
-    }
-
-    uint32_t* d32 = (uint32_t*)d;
-    const uint32_t* s32 = (const uint32_t*)s;
-    while (length >= 16)
-    {
-        *d32++ = *s32++;
-        *d32++ = *s32++;
-        *d32++ = *s32++;
-        *d32++ = *s32++;
-        length -= 16;
-    }
-
-    while (length >= 4)
-    {
-        *d32++ = *s32++;
-        length -= 4;
-    }
-
-    d = (unsigned char*)d32;
-    s = (const unsigned char*)s32;
-    while (length--)
-    {
-        *d++ = *s++;
-    }
+    __asm__ __volatile__ (
+        "cld\n"
+        "rep movsb"
+        : "+D" (destination),
+        "+S" (source),
+        "+c" (length)
+        :
+        : "memory"
+    );
 }
 
 VOID HalSetMemory(VOID* destination, const UINTPTR target, UINTPTR length)
@@ -254,24 +225,30 @@ VOID HalSetMemory(VOID* destination, const UINTPTR target, UINTPTR length)
     }
 }
 
-VOID HalMoveMemory(VOID* restrict destination, const void* restrict source, const size_t length)
+VOID HalMoveMemory(VOID* restrict destination, const void* restrict source, size_t length)
 {
-    unsigned char* dst = destination;
-    const unsigned char* src = source;
-
-    if (dst < src)
+    if (destination <= source || destination >= source + length)
     {
-        for (size_t i = 0; i < length; i++)
-        {
-            dst[i] = src[i];
-        }
+        __asm__ __volatile__ (
+            "cld\n"
+            "rep movsb"
+            : "+D" (destination), "+S" (source), "+c" (length)
+            :
+            : "memory"
+        );
     }
     else
     {
-        for (size_t i = length; i != 0; i--)
-        {
-            dst[i - 1] = src[i - 1];
-        }
+        destination += length - 1;
+        source += length - 1;
+        __asm__ __volatile__ (
+            "std\n"
+            "rep movsb\n"
+            "cld"
+            : "+D" (destination), "+S" (source), "+c" (length)
+            :
+            : "memory"
+        );
     }
 }
 
@@ -531,17 +508,6 @@ INUSTATIC UINT32 indw(UINT32 port)
     return data;
 }
 
-void HaliX86SetGdtEntry(const INT32 index, const UINT32 base, const UINT32 limit, const BYTE access,
-                        const BYTE granularity)
-{
-    FwGdtEntryTable[index].baseLow = base & 0xFFFF;
-    FwGdtEntryTable[index].baseMiddle = (base >> 16) & 0xFF;
-    FwGdtEntryTable[index].baseHigh = (base >> 24 & 0xFF);
-    FwGdtEntryTable[index].limiteLow = limit & 0xFFFF;
-    FwGdtEntryTable[index].granularity = (limit >> 16) & 0x0F;
-    FwGdtEntryTable[index].access = access;
-    FwGdtEntryTable[index].granularity = FwGdtEntryTable[index].granularity | (granularity & 0xF0);
-}
 
 VOID HaliX86FixupFrame(VOID* frame, enum PROCESS_MODE mode)
 {
@@ -572,7 +538,7 @@ UINTPTR HaliIsrHandler(struct HaliX86InterruptFrame* descriptor)
     previousControl = FwGetControlLevel();
     previousMode = FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
     FwSetInterruptFrame(descriptor);
-    HaliX86FixupFrame(descriptor,previousMode);
+    HaliX86FixupFrame(descriptor, previousMode);
 
     FwRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
 
@@ -624,7 +590,7 @@ UINTPTR HaliIrqHandler(struct HaliX86InterruptFrame* descriptor)
     previousControl = FwGetControlLevel();
     previousMode = FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
     FwSetInterruptFrame(descriptor);
-    HaliX86FixupFrame(descriptor,previousMode);
+    HaliX86FixupFrame(descriptor, previousMode);
 
     FwRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
 
@@ -642,7 +608,7 @@ UINTPTR HaliIrqHandler(struct HaliX86InterruptFrame* descriptor)
 
     if (signalEoi)
     {
-        FwSignalEoi(descriptor->int_no);
+        FwAcknowledgeInterrupt(descriptor->int_no);
     }
 
     if (FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode == PROCESS_KERNEL)
@@ -668,14 +634,27 @@ void HaliX86InitializeGdt(void)
     FwGdtPointer.limit = sizeof(FwGdtEntryTable) - 1;
     FwGdtPointer.base = (UINT32)FwGdtEntryTable;
 
-    HaliX86SetGdtEntry(0, 0, 0, 0, 0);
-    HaliX86SetGdtEntry(1, 0, 0xFFFFFFFF, 0x9A, 0xCF);
-    HaliX86SetGdtEntry(2, 0, 0xFFFFFFFF, 0x92, 0xCF);
-    HaliX86SetGdtEntry(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);
-    HaliX86SetGdtEntry(4, 0, 0xFFFFFFFF, 0xF2, 0xCF); // 0x9E?
-    HaliX86SetGdtEntry(5, (UINT32)&FwKernelTss, (UINT32)((char*)&FwKernelTss) + sizeof(struct HaliX86Tss), 0x89, 0);
+    RtlZeroMemory(FwGdtEntryTable, sizeof FwGdtEntryTable);
 
-    asm volatile ("lgdt %0" : "=m" (FwGdtPointer));
+    HaliX86LoadGdtEntry(1, 0, 0xFFFFFFFF, HALI_GDT_READ_WRITE, HALI_GDT_CODE_SEGMENT, HALI_GDT_SEGMENT,
+                        HALI_GDT_KERNEL_MODE, HALI_GDT_PAGE_GRANULARITY, HALI_32BIT_SEGMENT);
+
+    HaliX86LoadGdtEntry(2, 0, 0xFFFFFFFF, HALI_GDT_READ_WRITE, HALI_GDT_DATA_SEGMENT, HALI_GDT_SEGMENT,
+                        HALI_GDT_KERNEL_MODE, HALI_GDT_PAGE_GRANULARITY, HALI_32BIT_SEGMENT);
+
+    HaliX86LoadGdtEntry(3, 0, 0xFFFFFFFF, HALI_GDT_READ_WRITE, HALI_GDT_CODE_SEGMENT, HALI_GDT_SEGMENT,
+                        HALI_GDT_USER_MODE, HALI_GDT_PAGE_GRANULARITY, HALI_32BIT_SEGMENT);
+
+    HaliX86LoadGdtEntry(4, 0, 0xFFFFFFFF, HALI_GDT_READ_WRITE, HALI_GDT_DATA_SEGMENT, HALI_GDT_SEGMENT,
+                        HALI_GDT_USER_MODE, HALI_GDT_PAGE_GRANULARITY, HALI_32BIT_SEGMENT);
+
+    HaliX86LoadTssEntry(5, (UINT32)&FwKernelTss, sizeof(struct HaliX86Tss) - 1,
+                        HALI_TSS_32TSS_AVL,HALI_GDT_KERNEL_MODE);
+
+    HaliX86LoadGdtEntry(6, 0, 0xFFFF, HALI_GDT_READ_WRITE, HALI_GDT_CODE_SEGMENT, HALI_GDT_SEGMENT,
+                        HALI_GDT_KERNEL_MODE, HALI_GDT_BYTE_GRANULARITY, HALI_16BIT_SEGMENT);
+
+    asm volatile ("lgdt %0" : : "m" (FwGdtPointer));
     HaliX86FlushGdt(&FwGdtPointer);
 }
 
@@ -683,54 +662,54 @@ VOID HaliX86InitializeInterrupts()
 {
     HaliX86InitializeIdt();
 
-    HaliX86IntSetIsr(0, (UINT32)HaliIsr0,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(1, (UINT32)HaliIsr1,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(2, (UINT32)HaliIsr2,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(3, (UINT32)HaliIsr3,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(4, (UINT32)HaliIsr4,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(5, (UINT32)HaliIsr5,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(6, (UINT32)HaliIsr6,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(7, (UINT32)HaliIsr7,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(8, (UINT32)HaliIsr8,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(9, (UINT32)HaliIsr9,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(10, (UINT32)HaliIsr10,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(11, (UINT32)HaliIsr11,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(12, (UINT32)HaliIsr12,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(13, (UINT32)HaliIsr13,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(14, (UINT32)HaliIsr14,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(15, (UINT32)HaliIsr15,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(16, (UINT32)HaliIsr16,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(17, (UINT32)HaliIsr17,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(18, (UINT32)HaliIsr18,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(19, (UINT32)HaliIsr19,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(20, (UINT32)HaliIsr20,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(21, (UINT32)HaliIsr21,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(22, (UINT32)HaliIsr22,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(23, (UINT32)HaliIsr23,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(24, (UINT32)HaliIsr24,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(25, (UINT32)HaliIsr25,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(26, (UINT32)HaliIsr26,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(27, (UINT32)HaliIsr27,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(28, (UINT32)HaliIsr28,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(29, (UINT32)HaliIsr29,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(30, (UINT32)HaliIsr30,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(31, (UINT32)HaliIsr31,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(0, (UINT32)HaliIsr0,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(1, (UINT32)HaliIsr1,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(2, (UINT32)HaliIsr2,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(3, (UINT32)HaliIsr3,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(4, (UINT32)HaliIsr4,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(5, (UINT32)HaliIsr5,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(6, (UINT32)HaliIsr6,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(7, (UINT32)HaliIsr7,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(8, (UINT32)HaliIsr8,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(9, (UINT32)HaliIsr9,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(10, (UINT32)HaliIsr10,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(11, (UINT32)HaliIsr11,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(12, (UINT32)HaliIsr12,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(13, (UINT32)HaliIsr13,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(14, (UINT32)HaliIsr14,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(15, (UINT32)HaliIsr15,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(16, (UINT32)HaliIsr16,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(17, (UINT32)HaliIsr17,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(18, (UINT32)HaliIsr18,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(19, (UINT32)HaliIsr19,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(20, (UINT32)HaliIsr20,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(21, (UINT32)HaliIsr21,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(22, (UINT32)HaliIsr22,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(23, (UINT32)HaliIsr23,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(24, (UINT32)HaliIsr24,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(25, (UINT32)HaliIsr25,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(26, (UINT32)HaliIsr26,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(27, (UINT32)HaliIsr27,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(28, (UINT32)HaliIsr28,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(29, (UINT32)HaliIsr29,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(30, (UINT32)HaliIsr30,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(31, (UINT32)HaliIsr31,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
 
-    HaliX86IntSetIsr(32, (UINT32)HaliIrq0,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(33, (UINT32)HaliIrq1,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(34, (UINT32)HaliIrq2,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(35, (UINT32)HaliIrq3,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(36, (UINT32)HaliIrq4,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(37, (UINT32)HaliIrq5,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(38, (UINT32)HaliIrq6,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(39, (UINT32)HaliIrq7,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(40, (UINT32)HaliIrq8,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(41, (UINT32)HaliIrq9,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(42, (UINT32)HaliIrq10,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(43, (UINT32)HaliIrq11,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(44, (UINT32)HaliIrq12,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(45, (UINT32)HaliIrq13,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
-    HaliX86IntSetIsr(46, (UINT32)HaliIrq14,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(32, (UINT32)HaliIrq0,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(33, (UINT32)HaliIrq1,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(34, (UINT32)HaliIrq2,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(35, (UINT32)HaliIrq3,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(36, (UINT32)HaliIrq4,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(37, (UINT32)HaliIrq5,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(38, (UINT32)HaliIrq6,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(39, (UINT32)HaliIrq7,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(40, (UINT32)HaliIrq8,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(41, (UINT32)HaliIrq9,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(42, (UINT32)HaliIrq10,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(43, (UINT32)HaliIrq11,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(44, (UINT32)HaliIrq12,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(45, (UINT32)HaliIrq13,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(46, (UINT32)HaliIrq14,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
 
-    HaliX86IntSetIsr(X86_HAL_DISPATCH,(UINT32)HaliDispatch,X86_HAL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
+    HaliX86IntSetIsr(X86_HAL_DISPATCH, (UINT32)HaliDispatch,X86_HAL_KERNEL_CODE_SEGMENT,X86_HAL_INTERRUPT_GATE);
 }

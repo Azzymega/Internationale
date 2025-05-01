@@ -242,7 +242,40 @@ VOID HalMoveMemory(VOID* restrict destination, const void* restrict source, size
     }
 }
 
-VOID HalSaveState(struct THREAD* thread, VOID* state)
+DOUBLE HalFmod(DOUBLE x, DOUBLE y)
+{
+    DOUBLE result = 0;
+
+    if (y == 0.0)
+    {
+        return 0.0 / 0.0;
+    }
+
+    if (x != x || y != y)
+    {
+        return 0.0 / 0.0;
+    }
+
+    __asm__ volatile
+    (
+        "fldl %2\n"
+        "fldl %1\n"
+        "1:\n"
+        "fprem\n"
+        "fstsw %%ax\n"
+        "testb $4, %%ah\n"
+        "jnz 1b\n"
+        "fstpl %0\n"
+        "fstp %%st(0)\n"
+        : "=m" (result)
+        : "m" (x), "m" (y)
+        : "ax", "st", "st(1)"
+    );
+
+    return result;
+}
+
+VOID HalSaveState(struct KERNEL_THREAD* thread, VOID* state)
 {
     INU_ASSERT(thread);
     INU_ASSERT(state);
@@ -250,7 +283,7 @@ VOID HalSaveState(struct THREAD* thread, VOID* state)
     RtlCopyMemory(thread->frame, state, HalGetSerializedStateSize());
 }
 
-VOID HalSwitchState(struct THREAD* target, VOID* state)
+VOID HalSwitchState(struct KERNEL_THREAD* target, VOID* state)
 {
     INU_ASSERT(target);
     INU_ASSERT(state);
@@ -294,7 +327,7 @@ CONTROL_LEVEL HalGetInterruptControlLevel(UINTPTR index)
     return HalGlobalInterruptCls[index];
 }
 
-VOID HalJumpInKernelThread(struct THREAD* thread)
+VOID HalJumpInKernelThread(struct KERNEL_THREAD* thread)
 {
     struct HaliX86InterruptFrame* frame = thread->frame;
     HaliX86SetCrs(frame->cr3, frame->cr0, frame->cr4);

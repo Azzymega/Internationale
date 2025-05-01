@@ -25,7 +25,7 @@ struct PFN_FRAME
 
 struct PFN_DATABASE
 {
-    struct OBJECT_HEADER header;
+    struct KERNEL_OBJECT_HEADER header;
     struct SPINLOCK lock;
 
     UINTPTR frameCount;

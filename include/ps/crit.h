@@ -9,9 +9,9 @@ struct SPINLOCK
 
 struct CRITICAL_SECTION
 {
-    struct OBJECT_HEADER header;
+    struct KERNEL_OBJECT_HEADER header;
     struct SPINLOCK accquireLock;
-    struct THREAD* owner;
+    struct KERNEL_THREAD* owner;
     struct LIST_ENTRY locks;
     UINTPTR occupationCounter;
 };

@@ -4,7 +4,7 @@
 // Function prototypes and descriptions are taken from
 // https://gcc.gnu.org/onlinedocs/gccint/Integer-library-routines.html.
 
-// This file may be #include'd by another file, so we try not to pollute the
+// This file may be #intermarx'd by another file, so we try not to pollute the
 // namespace and we don't import any headers.
 
 // All functions must be resolvable by the linker and therefore can't be inline

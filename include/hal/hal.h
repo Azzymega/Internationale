@@ -21,15 +21,16 @@ VOID HalBugcheck(const CHAR *message, const CHAR *file, const CHAR* func, const 
 VOID HalCopyMemory(VOID* destination, VOID* source, UINTPTR length);
 VOID HalSetMemory(VOID* destination, UINTPTR value, UINTPTR length);
 VOID HalMoveMemory(VOID *restrict destination, const VOID *restrict source, UINTPTR length);
+DOUBLE HalFmod(DOUBLE x, DOUBLE y);
 
-VOID HalSaveState(struct THREAD* thread, VOID* state);
-VOID HalSwitchState(struct THREAD* target, VOID* state);
+VOID HalSaveState(struct KERNEL_THREAD* thread, VOID* state);
+VOID HalSwitchState(struct KERNEL_THREAD* target, VOID* state);
 
 VOID HalEnableInterrupts();
 VOID HalDisableInterrupts();
 VOID HalSetInterrupt(TRAP_HANDLER ptr, UINTPTR index, CONTROL_LEVEL level);
 CONTROL_LEVEL HalGetInterruptControlLevel(UINTPTR index);
-VOID HalJumpInKernelThread(struct THREAD* thread);
+VOID HalJumpInKernelThread(struct KERNEL_THREAD* thread);
 
 VOID HalSetZeroDivTrap(TRAP_HANDLER handler);
 VOID HalSetDebugTrap(TRAP_HANDLER handler);

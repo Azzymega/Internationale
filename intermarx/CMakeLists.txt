@@ -1,0 +1,21 @@
+include_directories(include)
+
+add_subdirectory(pal)
+add_subdirectory(mt)
+add_subdirectory(rtl)
+add_subdirectory(ob)
+add_subdirectory(far)
+add_subdirectory(ex)
+add_subdirectory(ldr)
+add_subdirectory(hp)
+
+add_library(intermarx STATIC main.c)
+
+target_link_libraries(intermarx PUBLIC Ldr)
+target_link_libraries(intermarx PUBLIC Hp)
+target_link_libraries(intermarx PUBLIC Rtl)
+target_link_libraries(intermarx PUBLIC Mt)
+target_link_libraries(intermarx PUBLIC Ob)
+target_link_libraries(intermarx PUBLIC Ex)
+target_link_libraries(intermarx PUBLIC Far)
+target_link_libraries(intermarx PUBLIC Pal)

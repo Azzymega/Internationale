@@ -360,7 +360,7 @@ INUSTATIC UINT32 indw(UINT32 port)
 
 VOID PaliPitInitialize(VOID)
 {
-    const UINT32 hz = 200;
+    const UINT32 hz = 100;
     const UINT32 divisor = PIT_FREQUENCY / hz;
     outb(PIT_CMD_PORT, PIT_BINARY | PIT_INT_TIMER | PIT_FULL_RW | PIT_ZERO_COUNTER);
     outb(PIT_DATA_PORT, divisor);

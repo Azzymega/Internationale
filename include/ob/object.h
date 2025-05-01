@@ -1,7 +1,8 @@
 #pragma once
+#include <ltbase.h>
 #include <ob/objectTypes.h>
 
-struct OBJECT_HEADER
+struct KERNEL_OBJECT_HEADER
 {
     INTPTR refCount;
     enum OBJECTS_TYPES type;

@@ -10,9 +10,9 @@ enum PROCESS_MODE
     PROCESS_USER
 };
 
-struct PROCESS
+struct KERNEL_PROCESS
 {
-    struct OBJECT_HEADER header;
+    struct KERNEL_OBJECT_HEADER header;
 
     UINTPTR id;
 
@@ -24,7 +24,7 @@ struct PROCESS
     struct VAS_DESCRIPTOR* vasDescriptor;
 };
 
-struct PROCESS* ProcessAllocate();
-VOID ProcessInitialize(struct PROCESS* self, struct VAS_DESCRIPTOR* vas, enum PROCESS_MODE mode);
-VOID ProcessRemoveSchedulableObject(struct PROCESS* self, struct THREAD* object);
-VOID ProcessAddSchedulableObject(struct PROCESS* self, struct THREAD* object);
+struct KERNEL_PROCESS* ProcessAllocate();
+VOID ProcessInitialize(struct KERNEL_PROCESS* self, struct VAS_DESCRIPTOR* vas, enum PROCESS_MODE mode);
+VOID ProcessRemoveSchedulableObject(struct KERNEL_PROCESS* self, struct KERNEL_THREAD* object);
+VOID ProcessAddSchedulableObject(struct KERNEL_PROCESS* self, struct KERNEL_THREAD* object);

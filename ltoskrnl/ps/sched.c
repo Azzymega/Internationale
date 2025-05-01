@@ -9,13 +9,13 @@
 INUGLOBAL UINTPTR PsGlobalThreadId;
 INUEXTERN struct LIST_ENTRY PsGlobalSchedulableObjectCollection;
 
-struct THREAD* ThreadAllocate()
+struct KERNEL_THREAD* ThreadAllocate()
 {
-    struct THREAD* thread = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,sizeof(struct THREAD));
+    struct KERNEL_THREAD* thread = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,sizeof(struct KERNEL_THREAD));
     return thread;
 }
 
-VOID ThreadInitialize(struct THREAD* self, struct PROCESS* process)
+VOID ThreadInitialize(struct KERNEL_THREAD* self, struct KERNEL_PROCESS* process)
 {
     self->header.type = THREAD_TYPE;
 
@@ -38,7 +38,7 @@ VOID ThreadInitialize(struct THREAD* self, struct PROCESS* process)
     ListEntryInitialize(&self->externalLock,self);
 }
 
-VOID ThreadLoad(struct THREAD *self, struct PROCESS *process, VOID *func, VOID *arg)
+VOID ThreadLoad(struct KERNEL_THREAD *self, struct KERNEL_PROCESS *process, VOID *func, VOID *arg)
 {
     INU_ASSERT(self);
     INU_ASSERT(process);
@@ -60,7 +60,7 @@ VOID ThreadLoad(struct THREAD *self, struct PROCESS *process, VOID *func, VOID *
     }
 }
 
-VOID ThreadUnlock(struct THREAD *self)
+VOID ThreadUnlock(struct KERNEL_THREAD *self)
 {
     self->lockCount--;
 
@@ -79,7 +79,7 @@ VOID ThreadUnlock(struct THREAD *self)
     }
 }
 
-VOID ThreadSleep(struct THREAD* self, UINTPTR count)
+VOID ThreadSleep(struct KERNEL_THREAD* self, UINTPTR count)
 {
     self->sleepLength = 500;
     self->sleepStart = PalClock();
@@ -87,7 +87,7 @@ VOID ThreadSleep(struct THREAD* self, UINTPTR count)
     ThreadLock(self);
 }
 
-VOID ThreadLock(struct THREAD *self)
+VOID ThreadLock(struct KERNEL_THREAD *self)
 {
     self->lockCount++;
 
@@ -103,7 +103,7 @@ VOID ThreadLock(struct THREAD *self)
 
     }
 
-    struct THREAD* current;
+    struct KERNEL_THREAD* current;
     if (INU_SUCCESS(PsGetCurrentThread(&current)))
     {
         if (current == self)

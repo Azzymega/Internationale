@@ -16,7 +16,7 @@ enum VAS_BLOCK_DESCRIPTOR_TYPES
 
 struct VAS_DESCRIPTOR
 {
-    struct OBJECT_HEADER header;
+    struct KERNEL_OBJECT_HEADER header;
 
     struct PROCESS* owner;
     VOID* pageTables;
@@ -26,7 +26,7 @@ struct VAS_DESCRIPTOR
 
 struct VAS_BLOCK_DESCRIPTOR
 {
-    struct OBJECT_HEADER header;
+    struct KERNEL_OBJECT_HEADER header;
 
     struct VAS_DESCRIPTOR* owner;
 

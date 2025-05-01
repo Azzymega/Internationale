@@ -12,7 +12,7 @@
 INUGLOBAL struct LIST_ENTRY PsGlobalSchedulableObjectCollection;
 INUGLOBAL struct LIST_ENTRY PsGlobalProcessCollection;
 
-INUGLOBAL struct PROCESS PsGlobalKernelProcess;
+INUGLOBAL struct KERNEL_PROCESS PsGlobalKernelProcess;
 INUGLOBAL struct VAS_DESCRIPTOR PsGlobalKernelVas;
 
 VOID PsiInitializeKernelProcess()
@@ -25,7 +25,7 @@ VOID PsiInitializeKernelProcess()
 
 VOID PsiIdle()
 {
-    struct THREAD* thread;
+    struct KERNEL_THREAD* thread;
     PsCreateThread(&thread,&PsGlobalKernelProcess,KeEntry,NULL);
     PsUnlockThread(thread);
 
@@ -37,11 +37,11 @@ VOID PsiIdle()
 
 VOID PsiSchedule(VOID* trapFrame)
 {
-    struct THREAD* currentThread;
+    struct KERNEL_THREAD* currentThread;
     PsGetCurrentThread(&currentThread);
 
     struct LIST_ENTRY* threadList = &PsGlobalSchedulableObjectCollection;
-    struct THREAD* targetThread = NULL;
+    struct KERNEL_THREAD* targetThread = NULL;
 
     INU_ASSERT(currentThread);
 
@@ -83,8 +83,7 @@ VOID PsiSchedule(VOID* trapFrame)
 
 VOID PsiInitializeIdleThread()
 {
-    struct THREAD *thread = NULL;
-
+    struct KERNEL_THREAD *thread = NULL;
     INUSTATUS res =  PsCreateThread(&thread,&PsGlobalKernelProcess,PsiIdle,NULL);
 
     if (INU_FAIL(res))
@@ -112,7 +111,7 @@ VOID PsiThreadPrologue(VOID *arg, VOID *func)
     PalGetCurrentCpuDescriptor()->schedulableObject->returnCode = retCode;
     PalGetCurrentCpuDescriptor()->schedulableObject->state = SCHEDULABLE_OBJECT_EXITED;
 
-    INU_BUGCHECK("THREAD DEATH IS NOT IMPLEMENTED!");
+    INU_BUGCHECK("KERNEL_THREAD DEATH IS NOT IMPLEMENTED!");
 
     while (TRUE);
 }

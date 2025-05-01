@@ -3,7 +3,7 @@
 #include <hal/hal.h>
 #include <ps/cpu.h>
 
-INUSTATUS PsCreateThread(struct THREAD** reference, struct PROCESS* process, VOID* function, VOID* argument)
+INUSTATUS PsCreateThread(struct KERNEL_THREAD** reference, struct KERNEL_PROCESS* process, VOID* function, VOID* argument)
 {
     INU_ASSERT(process);
     INU_ASSERT(function);
@@ -13,7 +13,7 @@ INUSTATUS PsCreateThread(struct THREAD** reference, struct PROCESS* process, VOI
         return STATUS_FAIL;
     }
 
-    struct THREAD* thread = ThreadAllocate();
+    struct KERNEL_THREAD* thread = ThreadAllocate();
 
     ThreadInitialize(thread,process);
     ThreadLoad(thread,process,function,argument);
@@ -24,9 +24,9 @@ INUSTATUS PsCreateThread(struct THREAD** reference, struct PROCESS* process, VOI
     return STATUS_SUCCESS;
 }
 
-INUSTATUS PsCreateThreadInCurrentProcess(struct THREAD** reference, VOID* function, VOID* argument)
+INUSTATUS PsCreateThreadInCurrentProcess(struct KERNEL_THREAD** reference, VOID* function, VOID* argument)
 {
-    struct PROCESS* process;
+    struct KERNEL_PROCESS* process;
     PsGetCurrentProcess(&process);
 
     INU_ASSERT(process);
@@ -37,7 +37,7 @@ INUSTATUS PsCreateThreadInCurrentProcess(struct THREAD** reference, VOID* functi
         return STATUS_FAIL;
     }
 
-    struct THREAD* thread = ThreadAllocate();
+    struct KERNEL_THREAD* thread = ThreadAllocate();
 
     ThreadInitialize(thread,process);
     ThreadLoad(thread,process,function,argument);
@@ -48,7 +48,7 @@ INUSTATUS PsCreateThreadInCurrentProcess(struct THREAD** reference, VOID* functi
     return STATUS_SUCCESS;
 }
 
-INUSTATUS PsUnlockThread(struct THREAD* thread)
+INUSTATUS PsUnlockThread(struct KERNEL_THREAD* thread)
 {
     INU_ASSERT(thread);
 
@@ -62,7 +62,7 @@ INUSTATUS PsUnlockThread(struct THREAD* thread)
     return STATUS_SUCCESS;
 }
 
-INUSTATUS PsLockThread(struct THREAD* thread)
+INUSTATUS PsLockThread(struct KERNEL_THREAD* thread)
 {
     INU_ASSERT(thread);
 
@@ -76,7 +76,7 @@ INUSTATUS PsLockThread(struct THREAD* thread)
     return STATUS_SUCCESS;
 }
 
-INUSTATUS PsSleepThread(struct THREAD* target, UINTPTR count)
+INUSTATUS PsSleepThread(struct KERNEL_THREAD* target, UINTPTR count)
 {
     ThreadSleep(target,count);
     return STATUS_SUCCESS;
@@ -84,7 +84,7 @@ INUSTATUS PsSleepThread(struct THREAD* target, UINTPTR count)
 
 INUSTATUS PsSleepCurrentThread(UINTPTR count)
 {
-    struct THREAD* current;
+    struct KERNEL_THREAD* current;
     if (INU_SUCCESS(PsGetCurrentThread(&current)))
     {
         PsSleepThread(current,count);
@@ -96,11 +96,11 @@ INUSTATUS PsSleepCurrentThread(UINTPTR count)
     }
 }
 
-INUSTATUS PsGetCurrentThread(struct THREAD** thread)
+INUSTATUS PsGetCurrentThread(struct KERNEL_THREAD** thread)
 {
     INU_ASSERT(thread);
 
-    struct THREAD* current = PalGetCurrentCpuDescriptor()->schedulableObject;
+    struct KERNEL_THREAD* current = PalGetCurrentCpuDescriptor()->schedulableObject;
 
     if (thread == NULL)
     {
@@ -114,7 +114,7 @@ INUSTATUS PsGetCurrentThread(struct THREAD** thread)
     }
 }
 
-INUSTATUS PsGetCurrentProcess(struct PROCESS** process)
+INUSTATUS PsGetCurrentProcess(struct KERNEL_PROCESS** process)
 {
     INU_ASSERT(process);
 
@@ -125,7 +125,7 @@ INUSTATUS PsGetCurrentProcess(struct PROCESS** process)
     }
     else
     {
-        struct PROCESS* current = PalGetCurrentCpuDescriptor()->schedulableObject->owner;
+        struct KERNEL_PROCESS* current = PalGetCurrentCpuDescriptor()->schedulableObject->owner;
         if (current == NULL)
         {
             return STATUS_FAIL;

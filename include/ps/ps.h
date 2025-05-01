@@ -5,14 +5,14 @@
 #include <rtl/list.h>
 
 VOID PsInitialize();
-INUSTATUS PsCreateThread(OUT struct THREAD** reference, IN struct PROCESS* process, IN VOID* function, IN VOID* argument);
-INUSTATUS PsCreateThreadInCurrentProcess(OUT struct THREAD** reference, IN VOID* function, IN VOID* argument);
+INUSTATUS PsCreateThread(OUT struct KERNEL_THREAD** reference, IN struct KERNEL_PROCESS* process, IN VOID* function, IN VOID* argument);
+INUSTATUS PsCreateThreadInCurrentProcess(OUT struct KERNEL_THREAD** reference, IN VOID* function, IN VOID* argument);
 
-INUSTATUS PsUnlockThread(IN struct THREAD* thread);
-INUSTATUS PsLockThread(IN struct THREAD* thread);
+INUSTATUS PsUnlockThread(IN struct KERNEL_THREAD* thread);
+INUSTATUS PsLockThread(IN struct KERNEL_THREAD* thread);
 
-INUSTATUS PsSleepThread(IN struct THREAD* target, IN UINTPTR count);
+INUSTATUS PsSleepThread(IN struct KERNEL_THREAD* target, IN UINTPTR count);
 INUSTATUS PsSleepCurrentThread(IN UINTPTR count);
 
-INUSTATUS PsGetCurrentThread(OUT struct THREAD** thread);
-INUSTATUS PsGetCurrentProcess(OUT struct PROCESS** process);
+INUSTATUS PsGetCurrentThread(OUT struct KERNEL_THREAD** thread);
+INUSTATUS PsGetCurrentProcess(OUT struct KERNEL_PROCESS** process);

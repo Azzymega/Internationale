@@ -5,13 +5,13 @@
 INUGLOBAL UINTPTR PsGlobalProcessId;
 INUEXTERN struct LIST_ENTRY PsGlobalSchedulableObjectCollection;
 
-struct PROCESS* ProcessAllocate()
+struct KERNEL_PROCESS* ProcessAllocate()
 {
-    struct PROCESS* process = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,sizeof(struct PROCESS));
+    struct KERNEL_PROCESS* process = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,sizeof(struct KERNEL_PROCESS));
     return process;
 }
 
-VOID ProcessInitialize(struct PROCESS *self, struct VAS_DESCRIPTOR *vas, enum PROCESS_MODE mode)
+VOID ProcessInitialize(struct KERNEL_PROCESS *self, struct VAS_DESCRIPTOR *vas, enum PROCESS_MODE mode)
 {
     INU_ASSERT(self);
     INU_ASSERT(vas);
@@ -27,13 +27,13 @@ VOID ProcessInitialize(struct PROCESS *self, struct VAS_DESCRIPTOR *vas, enum PR
     self->vasDescriptor = vas;
 }
 
-VOID ProcessRemoveSchedulableObject(struct PROCESS *self, struct THREAD *object)
+VOID ProcessRemoveSchedulableObject(struct KERNEL_PROCESS *self, struct KERNEL_THREAD *object)
 {
     ListEntryRemove(&object->processThreadCollection);
     ListEntryRemove(&object->schedulableCollection);
 }
 
-VOID ProcessAddSchedulableObject(struct PROCESS *self, struct THREAD *object)
+VOID ProcessAddSchedulableObject(struct KERNEL_PROCESS *self, struct KERNEL_THREAD *object)
 {
     ListEntryAdd(&self->scheduableObjects,&object->processThreadCollection);
     ListEntryAdd(&PsGlobalSchedulableObjectCollection,&object->schedulableCollection);

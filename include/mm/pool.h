@@ -32,7 +32,7 @@ struct MEMORY_POOL
 
 struct MEMORY_HEAP
 {
-    struct OBJECT_HEADER header;
+    struct KERNEL_OBJECT_HEADER header;
 
     UINTPTR startBoundary;
     UINTPTR endBoundary;

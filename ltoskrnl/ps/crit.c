@@ -43,7 +43,7 @@ VOID CriticalSectionEnter(struct CRITICAL_SECTION* self)
 
     SpinlockEnter(&self->accquireLock);
 
-    struct THREAD* thread;
+    struct KERNEL_THREAD* thread;
     PsGetCurrentThread(&thread);
 
     if (self->owner == thread)
@@ -77,7 +77,7 @@ VOID CriticalSectionExit(struct CRITICAL_SECTION* self)
 {
     INU_ASSERT(self);
 
-    struct THREAD* thread;
+    struct KERNEL_THREAD* thread;
     PsGetCurrentThread(&thread);
 
     if (self->owner != thread)
@@ -94,7 +94,7 @@ VOID CriticalSectionExit(struct CRITICAL_SECTION* self)
         return;
     }
 
-    struct THREAD* selected = ListEntryNext(&self->locks);
+    struct KERNEL_THREAD* selected = ListEntryNext(&self->locks);
     if (selected == NULL)
     {
         self->owner = NULL;

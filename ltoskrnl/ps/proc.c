@@ -7,7 +7,7 @@ INUEXTERN struct LIST_ENTRY PsGlobalSchedulableObjectCollection;
 
 struct PROCESS* ProcessAllocate()
 {
-    struct PROCESS* process = MmAllocatePoolWithTag(NonPagedPoolZeroed,sizeof(struct PROCESS),0);
+    struct PROCESS* process = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,sizeof(struct PROCESS));
     return process;
 }
 

@@ -1,5 +1,5 @@
 #include <ltbase.h>
-#include <fw/fw.h>
+#include <pal/pal.h>
 #include <hal/hal.h>
 #include <ps/cpu.h>
 
@@ -100,7 +100,7 @@ INUSTATUS PsGetCurrentThread(struct THREAD** thread)
 {
     INU_ASSERT(thread);
 
-    struct THREAD* current = FwGetCurrentCpuDescriptor()->schedulableObject;
+    struct THREAD* current = PalGetCurrentCpuDescriptor()->schedulableObject;
 
     if (thread == NULL)
     {
@@ -118,14 +118,14 @@ INUSTATUS PsGetCurrentProcess(struct PROCESS** process)
 {
     INU_ASSERT(process);
 
-    if (FwGetCurrentCpuDescriptor()->schedulableObject == NULL)
+    if (PalGetCurrentCpuDescriptor()->schedulableObject == NULL)
     {
         INU_BUGCHECK("Corrupted state!");
         return STATUS_FAIL;
     }
     else
     {
-        struct PROCESS* current = FwGetCurrentCpuDescriptor()->schedulableObject->owner;
+        struct PROCESS* current = PalGetCurrentCpuDescriptor()->schedulableObject->owner;
         if (current == NULL)
         {
             return STATUS_FAIL;

@@ -7,12 +7,12 @@
 
 struct VAS_BLOCK_DESCRIPTOR* VasBlockDescriptorAllocate()
 {
-    return MmAllocatePoolWithTag(NonPagedPoolZeroed, sizeof(struct VAS_BLOCK_DESCRIPTOR), 0);
+    return MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED, sizeof(struct VAS_BLOCK_DESCRIPTOR));
 }
 
 struct VAS_DESCRIPTOR* VasDescriptorAllocate()
 {
-    return MmAllocatePoolWithTag(NonPagedPoolZeroed, sizeof(struct VAS_DESCRIPTOR), 0);
+    return MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED, sizeof(struct VAS_DESCRIPTOR));
 }
 
 VOID VasDescriptorInitialize(struct VAS_DESCRIPTOR* self)
@@ -20,66 +20,51 @@ VOID VasDescriptorInitialize(struct VAS_DESCRIPTOR* self)
     self->header.type = VAS_DESCRIPTOR_TYPE;
     self->header.refCount = 2;
     self->pageTables = HalAllocatePageTable();
-
-    ListEntryInitialize(&self->vasBlockCollection,NULL);
 }
 
-VOID VasDescriptorVirtualAlloc(struct VAS_DESCRIPTOR* self, VOID* address, UINTPTR length,
-                               enum VAS_BLOCK_DESCRIPTOR_TYPES attributes)
-{
-    INU_ASSERT(self);
-
-    UINTPTR pageLength = length / HalGetPageSize();
-    if (length % HalGetPageSize() != 0)
-    {
-        pageLength++;
-    }
-
-    VOID* kernelVa = MmAllocatePhysical(pageLength);
-
-    struct VAS_BLOCK_DESCRIPTOR* block = VasBlockDescriptorAllocate();
-    VasBlockDescriptorInitialize(block, self, kernelVa, pageLength, address, attributes);
-
-    HalUpdateMapping(self);
-}
-
-VOID VasDescriptorMapMemory(struct VAS_DESCRIPTOR* self, VOID* virtualAddress, VOID* kernelAddress, UINTPTR length,
+INUSTATUS VasDescriptorMapMemory(struct VAS_DESCRIPTOR* self, VOID* virtualAddress, VOID* kernelAddress, UINTPTR length,
                             enum VAS_BLOCK_DESCRIPTOR_TYPES attributes)
 {
-    INU_ASSERT(self);
-    INU_ASSERT(kernelAddress);
+    INU_ASSERT(self != NULL);
 
-    struct LIST_ENTRY* vasBlock = self->vasBlockCollection.next;
-
-    UINTPTR pageLength = length/HalGetPageSize();
-    if (pageLength % HalGetPageSize() != 0)
+    UINTPTR numericVirtualAddress = (UINTPTR)virtualAddress;
+    UINTPTR pageSize = HalGetPageSize();
+    UINTPTR alignedLength = (length/pageSize)*pageSize;
+    if (length % pageSize != 0)
     {
-        pageLength++;
+        alignedLength += pageSize;
+    }
+
+    struct VAS_BLOCK_DESCRIPTOR* descriptor = self->region;
+    while (descriptor != NULL)
+    {
+        if (descriptor->startVa < numericVirtualAddress && descriptor->endVa > numericVirtualAddress)
+        {
+            return STATUS_REGION_OVERLAP;
+        }
+        descriptor = descriptor->next;
     }
 
     struct VAS_BLOCK_DESCRIPTOR* block = VasBlockDescriptorAllocate();
-    VasBlockDescriptorInitialize(block,self,kernelAddress,pageLength,virtualAddress,attributes);
+    VasBlockDescriptorInitialize(block,self,kernelAddress,alignedLength/pageSize,virtualAddress,attributes);
 
-    if (vasBlock->owner == NULL)
+    if (self->region == NULL)
     {
-
+        self->region = block;
     }
     else
     {
-        while (vasBlock->owner != NULL)
+        struct VAS_BLOCK_DESCRIPTOR* lastDescriptor = self->region;
+        while (lastDescriptor->next != NULL)
         {
-            struct VAS_BLOCK_DESCRIPTOR* desc = vasBlock->owner;
-
-            if (desc->startVa <= (UINTPTR)virtualAddress && (UINTPTR)virtualAddress <= desc->endVa)
-            {
-                INU_BUGCHECK("VM region intersect!");
-            }
-
-            vasBlock = vasBlock->next;
+            lastDescriptor = lastDescriptor->next;
         }
+        lastDescriptor->next = block;
     }
 
-    HalUpdateMapping(self);
+    HalMemoryMap(self,virtualAddress,kernelAddress,alignedLength,block->attributes);
+
+    return STATUS_SUCCESS;
 }
 
 VOID VasBlockDescriptorInitialize(struct VAS_BLOCK_DESCRIPTOR* self, struct VAS_DESCRIPTOR* owner, VOID* kmem,
@@ -87,7 +72,6 @@ VOID VasBlockDescriptorInitialize(struct VAS_BLOCK_DESCRIPTOR* self, struct VAS_
 {
     INU_ASSERT(self);
     INU_ASSERT(owner);
-    INU_ASSERT(kmem);
     INU_ASSERT(pageLength > 0);
 
     self->header.refCount = 2;
@@ -99,10 +83,7 @@ VOID VasBlockDescriptorInitialize(struct VAS_BLOCK_DESCRIPTOR* self, struct VAS_
     self->startVa = (UINTPTR)mapTarget;
     self->endVa = (UINTPTR)mapTarget + pageLength * HalGetPageSize();
 
-    self->pageLength = pageLength;
+    self->length = pageLength * HalGetPageSize();
     self->attributes = attributes;
     self->owner = owner;
-
-    ListEntryInitialize(&self->vasBlockCollection, self);
-    ListEntryAdd(&owner->vasBlockCollection, &self->vasBlockCollection);
 }

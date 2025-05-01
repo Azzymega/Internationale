@@ -1,40 +1,36 @@
 OUTPUT_FORMAT(elf32-i386)
-
-ENTRY(FwBoot)
-
+ENTRY(PalBoot)
 
 SECTIONS
 {
     . = 1M;
 
-    .interp :
-    {
-        *(.multiboot)
-        *(.interp)
+    .multiboot : {
+        *(.multiboot.data)
+        *(.multiboot.text)
     }
 
-	.text ALIGN(4K) :
-	{
-        *(.multiboot)
-		*(.text)
-	}
+    . += 0x80000000;
 
-	.rodata ALIGN(4K) :
-	{
-	    *(.multiboot)
-	    *(.rodata.str1.1)
-		*(.rodata)
-	}
+    PalKernelImageStart = .;
 
-	.data ALIGN(4K) :
-	{
-	    *(.multiboot)
-		*(.data)
-	}
+    .text ALIGN(4K) : AT(ADDR(.text) - 0x80000000) {
+        *(.text)
+    }
 
-	.bss ALIGN(4K) :
-	{
-		*(COMMON)
-		*(.bss)
-	}
+    .rodata ALIGN(4K) : AT(ADDR(.rodata) - 0x80000000) {
+        *(.rodata)
+    }
+
+    .data ALIGN(4K) : AT(ADDR(.data) - 0x80000000) {
+        *(.data)
+    }
+
+    .bss ALIGN(4K) : AT(ADDR(.bss) - 0x80000000) {
+        *(COMMON)
+        *(.bss)
+        *(.bootstrap_stack)
+    }
+
+    PalKernelImageEnd = .;
 }

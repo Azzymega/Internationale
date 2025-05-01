@@ -19,8 +19,9 @@ VOID HalBugcheck(const CHAR *message, const CHAR *file, const CHAR* func, const 
 #define INU_STATIC_ASSERT(target) _Static_assert(target)
 
 VOID HalCopyMemory(VOID* destination, VOID* source, UINTPTR length);
-VOID HalSetMemory(VOID* destination, UINTPTR target, UINTPTR length);
+VOID HalSetMemory(VOID* destination, UINTPTR value, UINTPTR length);
 VOID HalMoveMemory(VOID *restrict destination, const VOID *restrict source, UINTPTR length);
+
 VOID HalSaveState(struct THREAD* thread, VOID* state);
 VOID HalSwitchState(struct THREAD* target, VOID* state);
 
@@ -38,6 +39,6 @@ VOID HalSetProtectionFaultTrap(TRAP_HANDLER handler);
 VOID HalSetPageFaultTrap(TRAP_HANDLER handler);
 
 VOID* HalAllocatePageTable();
-VOID HalUpdateMapping(struct VAS_DESCRIPTOR* vas);
+VOID HalMemoryMap(struct VAS_DESCRIPTOR* vas, VOID* virtualAddress, VOID* kernelAddress, UINTPTR length, enum VAS_BLOCK_DESCRIPTOR_TYPES attributes);
 
 VOID HalModifyFrame(VOID* self, VOID* addressSpace, VOID* newStack, VOID* func, VOID* arg, enum PROCESS_MODE mode);

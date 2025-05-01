@@ -1,4 +1,4 @@
-#include <fw/fw.h>
+#include <pal/pal.h>
 #include <hal/hal.h>
 #include <mm/mm.h>
 #include <ps/crit.h>
@@ -6,7 +6,7 @@
 
 struct CRITICAL_SECTION* CriticalSectionAllocate()
 {
-    struct CRITICAL_SECTION* criticalSection = MmAllocatePoolWithTag(NonPagedPoolZeroed,sizeof(struct CRITICAL_SECTION),0);
+    struct CRITICAL_SECTION* criticalSection = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,sizeof(struct CRITICAL_SECTION));
     return criticalSection;
 }
 
@@ -68,7 +68,7 @@ VOID CriticalSectionEnter(struct CRITICAL_SECTION* self)
             SpinlockExit(&self->accquireLock);
             PsLockThread(thread);
 
-            FwYieldToDispatch();
+            PalYieldToDispatch();
         }
     }
 }

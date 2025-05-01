@@ -1,5 +1,5 @@
 
-add_subdirectory(fw)
+add_subdirectory(pal)
 add_subdirectory(hal)
 add_subdirectory(ke)
 add_subdirectory(rtl)
@@ -7,7 +7,7 @@ add_subdirectory(ps)
 add_subdirectory(mm)
 add_subdirectory(ob)
 
-target_link_libraries(ltoskrnl PUBLIC fw)
+target_link_libraries(ltoskrnl PUBLIC pal)
 target_link_libraries(ltoskrnl PUBLIC hal)
 target_link_libraries(ltoskrnl PUBLIC mm)
 target_link_libraries(ltoskrnl PUBLIC ps)

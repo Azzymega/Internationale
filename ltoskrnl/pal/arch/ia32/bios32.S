@@ -1,14 +1,6 @@
 
 .section .text
 
-# LOADING BASE - 0x7C00
-# CR0 - 0x520
-# CR3 - 0x500
-# IDTR - 0x530
-# GDTR - 0x540
-# ESP - 0x550
-# EDI - 0x560
-
 #define REBASE(x) (((x) - PaliX86BiosSwitch) + 0x7c00)
 
 .global PaliX86BiosSwitch
@@ -20,25 +12,26 @@ PaliX86BiosSwitch:
     movl 8(%ebp), %eax
     movb %al, REBASE(InterruptNumber)
     movl 12(%ebp), %edi
+    movl %edi, REBASE(EdiBuffer)
 
     pushal
     pushfl
 
     movl %cr3, %eax
-    movl %eax, 0x500
+    movl %eax, REBASE(Cr3Buffer)
+
     movl %cr0, %eax
-    movl %eax, 0x520
-    movl %esp, 0x550
-    movl %edi, 0x560
-    sidtl 0x530
-    sgdtl 0x540
+    movl %eax, REBASE(Cr0Buffer)
+
+    movl %esp, REBASE(EspBuffer)
+    sidtl REBASE(IdtrBuffer)
+    sgdtl REBASE(GdtrBuffer)
 
     movl %cr0, %eax
     andl $~(1 << 31), %eax
     movl %eax, %cr0
 
-    xorl %eax, %eax
-    movl %eax, %cr3
+    xorl %eax,%eax
 
     ljmp $0x30, $REBASE(Reload16Bit)
 
@@ -62,11 +55,9 @@ RealMode:
     mov %ax, %fs
     mov %ax, %gs
 
-    mov 0x560, %edi
-
     movl 4(%edi), %esi
     movl 8(%edi), %ebp
-    movw $0xF000, %sp
+    movl 12(%edi), %esp
     movl 16(%edi), %ebx
     movl 20(%edi), %edx
     movl 24(%edi), %ecx
@@ -76,19 +67,19 @@ RealMode:
     movw 34(%edi), %fs
     movw 36(%edi), %es
     movw 38(%edi), %ds
+    movw 40(%edi), %ss
 
-    pushl 40(%edi)
+    pushl 42(%edi)
     popfl
 
     movl (%edi), %edi
 
-    clc
-    cld
     int $0x00
 InterruptNumber = . - 1
 
+    cli
     pushl %edi
-    mov 0x560, %edi
+    mov REBASE(EdiBuffer), %edi
     pop (%edi)
 
     movl %esi, 4(%edi)
@@ -103,9 +94,10 @@ InterruptNumber = . - 1
     movw %fs, 34(%edi)
     movw %es, 36(%edi)
     movw %ds, 38(%edi)
+    movw %ss, 40(%edi)
 
     pushfl
-    pop 40(%edi)
+    pop 42(%edi)
 
     movl %cr0, %eax
     orl $1, %eax
@@ -116,8 +108,8 @@ InterruptNumber = . - 1
 ProtectedMode:
     .code32
 
-    lidtl 0x530
-    lgdtl 0x540
+    lidtl REBASE(IdtrBuffer)
+    lgdtl REBASE(GdtrBuffer)
 
     movw $0x10, %ax
     movw %ax, %ds
@@ -126,10 +118,10 @@ ProtectedMode:
     movw %ax, %gs
     movw %ax, %ss
 
-    movl 0x550, %esp
-    movl 0x500, %eax
+    movl REBASE(EspBuffer), %esp
+    movl REBASE(Cr3Buffer), %eax
     movl %eax, %cr3
-    movl 0x520, %eax
+    movl REBASE(Cr0Buffer), %eax
     movl %eax, %cr0
 
     popfl
@@ -141,6 +133,16 @@ ProtectedMode:
 RealModeIdt:
     .word 0x03FF
     .long 0x00000000
+
+GdtrBuffer: .space 6
+IdtrBuffer: .space 6
+Cr3Buffer: .space 4
+Cr0Buffer: .space 4
+EspBuffer: .space 4
+EdiBuffer: .space 4
+
+PaliX86StateStorage: .space 100
+PaliX86DataStorage: .space 4096
 
 .global PaliX86BiosSwitchEnd
 PaliX86BiosSwitchEnd:

@@ -1,6 +1,6 @@
 #include <ltbase.h>
 #include <stdatomic.h>
-#include <fw/fw.h>
+#include <pal/pal.h>
 #include <hal/hal.h>
 #include <mm/mm.h>
 #include <ps/cpu.h>
@@ -8,7 +8,7 @@
 #include <rtl/rtl.h>
 
 #include "hali.h"
-#include "../../../fw/arch/ia32/fwi.h"
+#include "../../../pal/arch/ia32/pali.h"
 
 #define X86_HAL_SYSTEM_CALL 0x2E
 
@@ -114,7 +114,7 @@ VOID HaliX86InitializeIdt()
 VOID HaliX86LoadIdtPointer(struct HaliX86IdtPointer* ptr)
 {
     ptr->limit = sizeof(HalGlobalInterruptDescriptors) - 1;
-    ptr->base = (UINT32)&HalGlobalInterruptDescriptors;
+    ptr->base = (UINT32)&HalGlobalInterruptDescriptors - PalGetNonPagedPoolVirtualAddress();
     asm volatile ("lidt %0" : : "m" (*ptr));
 }
 
@@ -152,27 +152,27 @@ BOOLEAN HalTryEnterLock(INUVOLATILE BOOLEAN* monitor)
 
 void HalAssert(const char* file, const char* func, const char* line)
 {
-    FwiPrint(file);
-    FwiPrint(func);
-    FwiPrint(line);
+    PaliPrint(file);
+    PaliPrint(func);
+    PalPrint(line);
     asm ("cli");
     asm ("hlt");
 }
 
 VOID HalBugcheck(const CHAR* message, const CHAR* file, const CHAR* func, const CHAR* line)
 {
-    FwiPrint("Assertion failed! : ");
+    asm ("cli");
+    PalPrint("Assertion failed! : ");
     if (message != NULL)
     {
-        FwiPrint(message);
+        PalPrint(message);
     }
-    FwiPrint("\r\nFile: ");
-    FwiPrint(file);
-    FwiPrint("\r\nFunction: ");
-    FwiPrint(func);
-    FwiPrint("\r\nLine: ");
-    FwiPrint(line);
-    asm ("cli");
+    PalPrint("\r\nFile: ");
+    PalPrint(file);
+    PalPrint("\r\nFunction: ");
+    PalPrint(func);
+    PalPrint("\r\nLine: ");
+    PalPrint(line);
     asm ("hlt");
 }
 
@@ -189,40 +189,30 @@ VOID HalCopyMemory(VOID* destination, VOID* source, UINTPTR length)
     );
 }
 
-VOID HalSetMemory(VOID* destination, const UINTPTR target, UINTPTR length)
+VOID HalSetMemory(VOID* destination, const UINTPTR value, UINTPTR length)
 {
-    unsigned char* p = destination;
-    uint32_t c32;
-
-    while (((uintptr_t)p & 3) && length)
+    if (length == 0)
     {
-        *p++ = (unsigned char)target;
-        length--;
+        return;
     }
 
-    c32 = 0x01010101 * (unsigned char)target;
+    BYTE byte = value;
+    UINT32 machineWordMask = byte * 0x01010101UL;
+    SIZE machineWorkCount = length / 4;
+    SIZE remainder = length % 4;
 
-    uint32_t* p32 = (uint32_t*)p;
-    while (length >= 16)
-    {
-        *p32++ = c32;
-        *p32++ = c32;
-        *p32++ = c32;
-        *p32++ = c32;
-        length -= 16;
-    }
-
-    while (length >= 4)
-    {
-        *p32++ = c32;
-        length -= 4;
-    }
-
-    p = (unsigned char*)p32;
-    while (length--)
-    {
-        *p++ = (unsigned char)target;
-    }
+    __asm__ volatile
+    (
+        "cld\n\t"
+        "rep stosl\n\t"
+        "mov %3, %%ecx\n\t"
+        "rep stosb"
+        : "+D" (destination)
+        : "a" (machineWordMask),
+        "c" (machineWorkCount),
+        "r" (remainder)
+        : "memory"
+    );
 }
 
 VOID HalMoveMemory(VOID* restrict destination, const void* restrict source, size_t length)
@@ -343,84 +333,79 @@ VOID HalSetPageFaultTrap(TRAP_HANDLER handler)
 
 VOID* HalAllocatePageTable()
 {
-    return MmAllocatePhysical(1);
+    return MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED, HalGetPageSize());
 }
 
-VOID HalUpdateMapping(struct VAS_DESCRIPTOR* vas)
+VOID HalMemoryMap(struct VAS_DESCRIPTOR* vas, VOID* virtualAddress, VOID* kernelAddress, UINTPTR length,
+                  enum VAS_BLOCK_DESCRIPTOR_TYPES attributes)
 {
-    INU_ASSERT(vas);
     INU_ASSERT(vas->pageTables);
 
     struct HaliX86PageDirectoryEntry* directory = vas->pageTables;
-    for (int i = 0; i < 1024; ++i)
+    const UINTPTR fourMb = 0x400000;
+    UINTPTR pageSize = HalGetPageSize();
+    UINTPTR nonPagedPoolVA = PalGetNonPagedPoolVirtualAddress();
+
+    BOOLEAN setRW = RtlHasFlag(attributes, VAS_DESCRIPTOR_RW);
+    BOOLEAN setSU = RtlHasFlag(attributes, VAS_DESCRIPTOR_SU);
+
+    UINTPTR pageLength = (length + pageSize - 1) / pageSize;
+
+    UINTPTR currentVirtual = (UINTPTR)virtualAddress;
+    UINTPTR currentKernel = (UINTPTR)kernelAddress;
+    UINTPTR remainingPages = pageLength;
+
+    while (remainingPages > 0)
     {
-        if (directory[i].present)
+        UINTPTR pdeIndex = currentVirtual >> 22;
+        UINTPTR offsetInPDE = currentVirtual & 0x3FFFFF;
+        UINTPTR pteStart = offsetInPDE >> 12;
+
+        UINTPTR pagesInPDE = (0x400000 - offsetInPDE) >> 12;
+        UINTPTR pagesToProcess;
+        if (pagesInPDE < remainingPages)
         {
-            MmFreePhysical((VOID*)(directory[i].address << 12), 1);
-            directory[i].present = FALSE;
+            pagesToProcess = pagesInPDE;
         }
-    }
-
-    struct LIST_ENTRY* entry = vas->vasBlockCollection.next;
-    INU_ASSERT(entry->owner != NULL);
-
-    const UINTPTR pageSize = HalGetPageSize();
-    const UINTPTR pdeMask = 0xFFC00000;
-    struct LIST_ENTRY* startEntry = entry;
-
-    do
-    {
-        struct VAS_BLOCK_DESCRIPTOR* block = entry->owner;
-        INU_ASSERT(block && block->pageLength > 0);
-        INU_ASSERT(block->startVa % pageSize == 0);
-
-        const UINTPTR startVa = block->startVa;
-        const UINTPTR totalSize = block->pageLength * pageSize;
-        const UINTPTR endVa = startVa + totalSize - 1;
-        const BOOLEAN isRw = (block->attributes & VAS_DESCRIPTOR_RW);
-        const BOOLEAN isSu = (block->attributes & VAS_DESCRIPTOR_SU);
-
-        UINTPTR currentDir = (startVa & pdeMask) >> 22;
-        const UINTPTR endDir = (endVa & pdeMask) >> 22;
-
-        for (; currentDir <= endDir; currentDir++)
+        else
         {
-            if (!directory[currentDir].present)
-            {
-                VOID* pte = MmAllocatePhysical(1);
-                directory[currentDir].address = (UINT32)pte >> 12;
-                directory[currentDir].present = TRUE;
-            }
-
-            UINTPTR pdeBase = currentDir << 22;
-            UINTPTR vaStart = (startVa > pdeBase) ? startVa : pdeBase;
-            UINTPTR vaEnd = (endVa < (pdeBase | 0x3FFFFF)) ? endVa : (pdeBase | 0x3FFFFF);
-
-            struct HaliX86PageTableEntry* pte = (struct HaliX86PageTableEntry*)(directory[currentDir].address << 12);
-            UINTPTR startIdx = (vaStart - pdeBase) >> 12;
-            UINTPTR endIdx = (vaEnd - pdeBase) >> 12;
-
-            for (UINTPTR idx = startIdx; idx <= endIdx; idx++)
-            {
-                pte[idx].present = TRUE;
-                pte[idx].address = vaStart + (idx - startIdx) * pageSize >> 12;
-
-                if (isRw)
-                {
-                    pte[idx].rw = TRUE;
-                }
-
-                if (isSu)
-                {
-                    pte[idx].su = TRUE;
-                }
-            }
+            pagesToProcess = remainingPages;
         }
 
-        entry = entry->next;
-        INU_ASSERT(entry != NULL);
+        struct HaliX86PageTableEntry* entry = NULL;
+
+        if (directory[pdeIndex].present == FALSE)
+        {
+            VOID* allocatedAddress = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED, pageSize);
+            directory[pdeIndex].present = TRUE;
+            directory[pdeIndex].rw = TRUE;
+            directory[pdeIndex].us = TRUE;
+            directory[pdeIndex].address = ((UINTPTR)allocatedAddress - nonPagedPoolVA) >> 12;
+            entry = allocatedAddress;
+        }
+        else
+        {
+            entry = (struct HaliX86PageTableEntry*)((directory[pdeIndex].address << 12) + nonPagedPoolVA);
+        }
+
+        INU_ASSERT(entry);
+
+        for (UINTPTR i = 0; i < pagesToProcess; i++)
+        {
+            UINTPTR pteIndex = pteStart + i;
+            entry[pteIndex].present = TRUE;
+            entry[pteIndex].address = (currentKernel + (i << 12)) >> 12;
+
+            if (setRW)
+                entry[pteIndex].rw = TRUE;
+            if (setSU)
+                entry[pteIndex].su = TRUE;
+        }
+
+        currentVirtual += pagesToProcess << 12;
+        currentKernel += pagesToProcess << 12;
+        remainingPages -= pagesToProcess;
     }
-    while (entry != startEntry && entry->owner != NULL);
 }
 
 VOID HalModifyFrame(VOID* self, VOID* addressSpace, VOID* newStack, VOID* func, VOID* arg,
@@ -451,7 +436,7 @@ VOID HalModifyFrame(VOID* self, VOID* addressSpace, VOID* newStack, VOID* func, 
         flags.interruptEnabled = TRUE;
         flags.iopl = X86_HAL_SYSTEM_KERNEL_MODE;
 
-        frame->cr3 = (UINT32)addressSpace;
+        frame->cr3 = (UINT32)addressSpace - PalGetNonPagedPoolVirtualAddress();
         frame->eip = (UINT32)PsiThreadPrologue;
         frame->esp = (UINT32)stack;
 
@@ -535,26 +520,26 @@ UINTPTR HaliIsrHandler(struct HaliX86InterruptFrame* descriptor)
 
     INU_BUGCHECK("Exception!");
 
-    previousControl = FwGetControlLevel();
-    previousMode = FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
-    FwSetInterruptFrame(descriptor);
+    previousControl = PalGetControlLevel();
+    previousMode = PalGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
+    PalSetInterruptFrame(descriptor);
     HaliX86FixupFrame(descriptor, previousMode);
 
-    FwRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
+    PalRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
 
     if (HalGlobalInterruptsHandlers[descriptor->int_no] != NULL)
     {
         HalGlobalInterruptsHandlers[descriptor->int_no](descriptor);
-        FwSetInterruptFrame(NULL);
+        PalSetInterruptFrame(NULL);
     }
 
-    FwRaiseControlLevel(previousControl);
+    PalRaiseControlLevel(previousControl);
 
     INU_ASSERT(previousMode != PROCESS_UNKNOWN);
-    INU_ASSERT(FwGetCurrentCpuDescriptor()->schedulableObject != NULL);
-    INU_ASSERT(FwGetCurrentCpuDescriptor()->schedulableObject->owner != NULL);
+    INU_ASSERT(PalGetCurrentCpuDescriptor()->schedulableObject != NULL);
+    INU_ASSERT(PalGetCurrentCpuDescriptor()->schedulableObject->owner != NULL);
 
-    if (FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode == PROCESS_KERNEL)
+    if (PalGetCurrentCpuDescriptor()->schedulableObject->owner->mode == PROCESS_KERNEL)
     {
         descriptor->esp -= 12;
         UINT32* setter = (UINT32*)descriptor->esp;
@@ -587,31 +572,31 @@ UINTPTR HaliIrqHandler(struct HaliX86InterruptFrame* descriptor)
         signalEoi = TRUE;
     }
 
-    previousControl = FwGetControlLevel();
-    previousMode = FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
-    FwSetInterruptFrame(descriptor);
+    previousControl = PalGetControlLevel();
+    previousMode = PalGetCurrentCpuDescriptor()->schedulableObject->owner->mode;
+    PalSetInterruptFrame(descriptor);
     HaliX86FixupFrame(descriptor, previousMode);
 
-    FwRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
+    PalRaiseControlLevel(HalGlobalInterruptCls[descriptor->int_no]);
 
     if (HalGlobalInterruptsHandlers[descriptor->int_no] != NULL)
     {
         HalGlobalInterruptsHandlers[descriptor->int_no](descriptor);
-        FwSetInterruptFrame(NULL);
+        PalSetInterruptFrame(NULL);
     }
 
-    FwRaiseControlLevel(previousControl);
+    PalRaiseControlLevel(previousControl);
 
     INU_ASSERT(previousMode != PROCESS_UNKNOWN);
-    INU_ASSERT(FwGetCurrentCpuDescriptor()->schedulableObject != NULL);
-    INU_ASSERT(FwGetCurrentCpuDescriptor()->schedulableObject->owner != NULL);
+    INU_ASSERT(PalGetCurrentCpuDescriptor()->schedulableObject != NULL);
+    INU_ASSERT(PalGetCurrentCpuDescriptor()->schedulableObject->owner != NULL);
 
     if (signalEoi)
     {
-        FwAcknowledgeInterrupt(descriptor->int_no);
+        PalAcknowledgeInterrupt(descriptor->int_no);
     }
 
-    if (FwGetCurrentCpuDescriptor()->schedulableObject->owner->mode == PROCESS_KERNEL)
+    if (PalGetCurrentCpuDescriptor()->schedulableObject->owner->mode == PROCESS_KERNEL)
     {
         descriptor->esp -= 12;
         UINT32* setter = (UINT32*)descriptor->esp;
@@ -632,7 +617,7 @@ UINTPTR HaliIrqHandler(struct HaliX86InterruptFrame* descriptor)
 void HaliX86InitializeGdt(void)
 {
     FwGdtPointer.limit = sizeof(FwGdtEntryTable) - 1;
-    FwGdtPointer.base = (UINT32)FwGdtEntryTable;
+    FwGdtPointer.base = (UINT32)FwGdtEntryTable - PalGetNonPagedPoolVirtualAddress();
 
     RtlZeroMemory(FwGdtEntryTable, sizeof FwGdtEntryTable);
 

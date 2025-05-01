@@ -1,4 +1,4 @@
-#include <fw/fw.h>
+#include <pal/pal.h>
 #include <hal/hal.h>
 #include <ke/ke.h>
 #include <ps/ps.h>
@@ -18,8 +18,9 @@ INUGLOBAL struct VAS_DESCRIPTOR PsGlobalKernelVas;
 VOID PsiInitializeKernelProcess()
 {
     VasDescriptorInitialize(&PsGlobalKernelVas);
-    VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)0,(VOID*)4096,2147483648,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
     ProcessInitialize(&PsGlobalKernelProcess,&PsGlobalKernelVas,PROCESS_KERNEL);
+    VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)0x80000000,(VOID*)0,1073741824,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
+    VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)0,(VOID*)0,4194304,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
 }
 
 VOID PsiIdle()
@@ -30,7 +31,7 @@ VOID PsiIdle()
 
     while (TRUE)
     {
-        FwYieldToDispatch();
+        PalYieldToDispatch();
     }
 }
 
@@ -59,7 +60,7 @@ VOID PsiSchedule(VOID* trapFrame)
     {
         if (targetThread->isSleep == TRUE)
         {
-            const UINTPTR clock = FwClock();
+            const UINTPTR clock = PalClock();
 
             if (targetThread->sleepStart + targetThread->sleepLength < clock)
             {
@@ -75,7 +76,7 @@ VOID PsiSchedule(VOID* trapFrame)
         goto Select;
     }
 
-    FwGetCurrentCpuDescriptor()->schedulableObject = targetThread;
+    PalGetCurrentCpuDescriptor()->schedulableObject = targetThread;
 
     HalSwitchState(targetThread,trapFrame);
 }
@@ -86,14 +87,14 @@ VOID PsiInitializeIdleThread()
 
     INUSTATUS res =  PsCreateThread(&thread,&PsGlobalKernelProcess,PsiIdle,NULL);
 
-    if (!INU_SUCCESS(res))
+    if (INU_FAIL(res))
     {
         INU_BUGCHECK("Failed to initialize idle thread!");
     }
     else
     {
-        FwGetCurrentCpuDescriptor()->controlLevel = 0;
-        FwGetCurrentCpuDescriptor()->schedulableObject = thread;
+        PalGetCurrentCpuDescriptor()->controlLevel = 0;
+        PalGetCurrentCpuDescriptor()->schedulableObject = thread;
 
         PsUnlockThread(thread);
         HalJumpInKernelThread(thread);
@@ -108,8 +109,8 @@ VOID PsiThreadPrologue(VOID *arg, VOID *func)
 
     int retCode = entry(arg);
 
-    FwGetCurrentCpuDescriptor()->schedulableObject->returnCode = retCode;
-    FwGetCurrentCpuDescriptor()->schedulableObject->state = SCHEDULABLE_OBJECT_EXITED;
+    PalGetCurrentCpuDescriptor()->schedulableObject->returnCode = retCode;
+    PalGetCurrentCpuDescriptor()->schedulableObject->state = SCHEDULABLE_OBJECT_EXITED;
 
     INU_BUGCHECK("THREAD DEATH IS NOT IMPLEMENTED!");
 
@@ -121,7 +122,7 @@ VOID PsInitialize()
     ListEntryInitialize(&PsGlobalSchedulableObjectCollection,NULL);
     ListEntryInitialize(&PsGlobalProcessCollection,NULL);
 
-    FwSetScheduler(PsiSchedule);
+    PalSetScheduler(PsiSchedule);
 
     PsiInitializeKernelProcess();
     PsiInitializeIdleThread();

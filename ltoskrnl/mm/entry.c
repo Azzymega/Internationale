@@ -3,62 +3,91 @@
 #include <mm/mm.h>
 #include <mm/pfndb.h>
 #include <mm/pool.h>
+#include <pal/pal.h>
 #include <rtl/rtl.h>
 
-INUGLOBAL struct PFN_DATABASE MmPfnGlobalDatabase;
-INUGLOBAL struct MEMORY_HEAP MmGlobalMemoryHeap;
+INUGLOBAL struct PFN_DATABASE* MmPfnGlobalDatabase;
 
-VOID MmInitialize(VOID* blockStart, UINTPTR blockSize)
+INUGLOBAL struct MEMORY_HEAP MmGlobalNonPagedMemoryHeap;
+INUGLOBAL struct MEMORY_HEAP MmGlobalPagedMemoryHeap;
+
+VOID MmInitialize(struct PHYSICAL_MEMORY_BLOCK* blocks, UINTPTR count, VOID* location)
 {
-    PfnDatabaseInitialize(&MmPfnGlobalDatabase,blockStart,blockSize);
-    MemoryHeapInitialize(&MmGlobalMemoryHeap);
+    MmPfnGlobalDatabase = location;
+
+    PfnDatabaseInitialize(MmPfnGlobalDatabase, blocks, count);
+
+    MemoryHeapInitialize(&MmGlobalNonPagedMemoryHeap, 0, PalGetNonPagedPoolSize());
+    MemoryHeapInitialize(&MmGlobalPagedMemoryHeap, 0,0);
 }
 
-VOID* MmAllocatePhysical(UINTPTR pageCount)
+VOID* MmAllocateNonPagedPoolMemory(UINTPTR pageCount)
 {
-    return PfnDatabaseAllocatePages(&MmPfnGlobalDatabase,pageCount);
+    VOID* mem;
+    if (INU_SUCCESS(PfnDatabaseAllocatePages(MmPfnGlobalDatabase,pageCount,NULL,(VOID*)0x40000000,&mem)))
+    {
+        return mem + PalGetNonPagedPoolVirtualAddress();
+    }
+    else
+    {
+        INU_BUGCHECK("OUT OF MEMORY!");
+        return NULL;
+    }
 }
 
-VOID MmFreePhysical(VOID *address, UINTPTR count)
+VOID MmFreeNonPagedPoolMemory(VOID* address, UINTPTR count)
 {
     UINTPTR addressValue = (UINTPTR)address;
-    UINTPTR pageIndex = addressValue/HalGetPageSize();
+    UINTPTR pageIndex = addressValue / HalGetPageSize();
 
-    PfnDatabaseFreePages(&MmPfnGlobalDatabase,pageIndex,count);
+    if (INU_FAIL(PfnDatabaseFreePages(MmPfnGlobalDatabase,pageIndex,count)))
+    {
+        INU_BUGCHECK("FAIL TO FREE MEMORY!");
+    }
 }
 
-VOID * MmAllocatePoolWithTag(enum POOL_TYPE type, UINTPTR length, UINT32 tag)
+VOID* MmAllocatePoolMemory(enum HEAP_TYPE type, UINTPTR length)
 {
-    if (type == NonPagedPoolZeroed)
+    if (type == NON_PAGED_HEAP_ZEROED)
     {
-        VOID* allocated = MemoryHeapAllocate(&MmGlobalMemoryHeap,length);
-        RtlSetMemory(allocated,0,length);
+        VOID* allocated = MemoryHeapAllocate(&MmGlobalNonPagedMemoryHeap,length,type);
+        RtlZeroMemory(allocated,length);
+        return allocated;
+    }
+    else if (type == NON_PAGED_HEAP)
+    {
+        VOID* allocated = MemoryHeapAllocate(&MmGlobalNonPagedMemoryHeap,length,type);
+        return allocated;
+    }
+    else if (type == PAGED_HEAP)
+    {
+        INU_BUGCHECK("BAD POOL TYPE!");
+        VOID* allocated = MemoryHeapAllocate(&MmGlobalPagedMemoryHeap,length,type);
         return allocated;
     }
     else
     {
-        return MemoryHeapAllocate(&MmGlobalMemoryHeap,length);
+        INU_BUGCHECK("BAD POOL TYPE!");
+        return NULL;
     }
 }
 
-VOID MmFreePoolWithTag(VOID *pool, UINT32 tag)
+VOID MmFreePoolMemory(VOID* mem)
 {
-    MemoryHeapFree(&MmGlobalMemoryHeap,pool);
+    MemoryHeapFree(&MmGlobalNonPagedMemoryHeap, mem);
 }
 
 INTPTR MmGetTotalMemory()
 {
-    return MmPfnGlobalDatabase.count*HalGetPageSize();
+    return MmPfnGlobalDatabase->frameCount * HalGetPageSize();
 }
 
 INTPTR MmGetOccupiedMemory()
 {
-    return MmPfnGlobalDatabase.allocated*HalGetPageSize();
+    return MmPfnGlobalDatabase->allocatedCount * HalGetPageSize();
 }
 
 INTPTR MmGetFreeMemory()
 {
-    return MmGetTotalMemory()-MmGetOccupiedMemory();
+    return MmGetTotalMemory() - MmGetOccupiedMemory();
 }
-
-

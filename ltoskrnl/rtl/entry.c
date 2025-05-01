@@ -22,6 +22,33 @@ VOID RtlZeroMemory(VOID* destination, UINTPTR legnth)
     RtlSetMemory(destination,0,legnth);
 }
 
+BOOLEAN RtlHasFlag(INTPTR enumValue, UINTPTR flag)
+{
+    if ((enumValue & flag) == flag)
+    {
+        return TRUE;
+    }
+    else
+    {
+        return FALSE;
+    }
+}
+
+VOID RtlSetBit(UINTPTR* pointer, UINTPTR n)
+{
+    *pointer |= (1 << n);
+}
+
+BOOLEAN RtlCheckBit(UINTPTR pointer, UINTPTR n)
+{
+    return (pointer >> n) & 1;
+}
+
+VOID RtlClearBit(UINTPTR* pointer, UINTPTR n)
+{
+    *pointer &= ~(1 << n);
+}
+
 void * memset(void *dest, int value, size_t length)
 {
     RtlSetMemory(dest,value,length);
@@ -78,6 +105,12 @@ int memcmp(const void *aptr, const void *bptr, const size_t size)
     }
 
     return 0;
+}
+
+void* memcpy(void* dest, void* src, size_t n)
+{
+    HalCopyMemory(dest,src,n);
+    return dest;
 }
 
 char * itoa(int value, char *str, int base)

@@ -10,7 +10,7 @@
 #ifndef _KERNEL_ASSERT
 #define _KERNEL_ASSERT
 #if __STDC_VERSION__ == 199901L
-void HalAssert(const char *file, const char* func, const char *line);
+void HalAssert(const char* file, const char* func, const char* line);
 #else
 void _Kassert( char const * const );
 #endif
@@ -91,17 +91,19 @@ typedef uint16_t UINT16;
 
 typedef size_t SIZE;
 typedef UINTPTR CONTROL_LEVEL;
-typedef intptr_t INUSTATUS;
 typedef VOID* REFERENCE;
 
-enum INU_SYSTEM_STATUSES
+typedef enum INUSTATUS
 {
     STATUS_SUCCESS,
-    STATUS_FAIL,
+    STATUS_FAIL = -INT32_MAX,
+    STATUS_EXCEPTION,
     STATUS_UNIMPLEMENTED,
     STATUS_INSUFFICIENT_RESOURCES,
-};
+    STATUS_REGION_OVERLAP
+} INUSTATUS;
 
-typedef void (*TRAP_HANDLER)(VOID *);
+#define INU_SUCCESS(status) (INTPTR)status >= 0
+#define INU_FAIL(status) (INTPTR)status < 0
 
-#define INU_SUCCESS(status) status == STATUS_SUCCESS
+typedef void (*TRAP_HANDLER)(VOID*);

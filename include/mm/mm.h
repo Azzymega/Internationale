@@ -1,23 +1,31 @@
 #pragma once
 #include <ltbase.h>
 
-enum POOL_TYPE {
-    UnusedPool,
-    NonPagedPool,
-    NonPagedPoolExecute,
-    NonPagedPoolZeroed,
-    NonPagedPoolZeroedExecute,
-    NonPagedPoolWriteCombining,
-    MaximumPool
+enum HEAP_TYPE {
+    NON_PAGED_HEAP,
+    NON_PAGED_HEAP_ZEROED,
+    PAGED_HEAP,
 };
 
-VOID MmInitialize(VOID* blockStart, UINTPTR blockSize);
+enum PHYSICAL_MEMORY_BLOCK_TYPE
+{
+    BLOCK_TYPE_UNUSED,
+    BLOCK_TYPE_USABLE,
+    BLOCK_TYPE_RESERVED
+};
 
-VOID* MmAllocatePhysical(UINTPTR pageCount);
-VOID MmFreePhysical(VOID* address, UINTPTR count);
+struct PHYSICAL_MEMORY_BLOCK
+{
+    UINTPTR start;
+    UINTPTR length;
+    UINTPTR end;
+    enum PHYSICAL_MEMORY_BLOCK_TYPE type;
+};
 
-VOID* MmAllocatePoolWithTag(enum POOL_TYPE type, UINTPTR length, UINT32 tag);
-VOID MmFreePoolWithTag(VOID* pool, UINT32 tag);
+VOID MmInitialize(struct PHYSICAL_MEMORY_BLOCK* blocks, UINTPTR count, VOID* location);
+
+VOID* MmAllocatePoolMemory(enum HEAP_TYPE type, UINTPTR length);
+VOID MmFreePoolMemory(VOID* mem);
 
 INTPTR MmGetTotalMemory();
 INTPTR MmGetOccupiedMemory();

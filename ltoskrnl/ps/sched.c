@@ -1,4 +1,4 @@
-#include <fw/fw.h>
+#include <pal/pal.h>
 #include <hal/hal.h>
 #include <mm/mm.h>
 #include <ps/proc.h>
@@ -11,7 +11,7 @@ INUEXTERN struct LIST_ENTRY PsGlobalSchedulableObjectCollection;
 
 struct THREAD* ThreadAllocate()
 {
-    struct THREAD* thread = MmAllocatePoolWithTag(NonPagedPoolZeroed,sizeof(struct THREAD),0);
+    struct THREAD* thread = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,sizeof(struct THREAD));
     return thread;
 }
 
@@ -31,7 +31,7 @@ VOID ThreadInitialize(struct THREAD* self, struct PROCESS* process)
     self->sleepStart = 0;
     self->priority = 0;
     self->lockCount = 1;
-    self->frame = MmAllocatePoolWithTag(NonPagedPoolZeroed,HalGetSerializedStateSize(),0);
+    self->frame = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,HalGetSerializedStateSize());
 
     ListEntryInitialize(&self->schedulableCollection,self);
     ListEntryInitialize(&self->processThreadCollection,self);
@@ -51,7 +51,7 @@ VOID ThreadLoad(struct THREAD *self, struct PROCESS *process, VOID *func, VOID *
     // TODO: MAKE NORMAL USERMODE VMALLOC ALLOCATOR!
     if (process->mode == PROCESS_KERNEL)
     {
-        VOID* stack = MmAllocatePhysical(PS_BASE_STACK_PAGE_SIZE);
+        VOID* stack = MmAllocatePoolMemory(NON_PAGED_HEAP,PS_BASE_STACK_PAGE_SIZE*HalGetPageSize());
         HalModifyFrame(self->frame,process->vasDescriptor->pageTables,stack+PS_BASE_STACK_PAGE_SIZE*HalGetPageSize(),func,arg,process->mode);
     }
     else
@@ -82,7 +82,7 @@ VOID ThreadUnlock(struct THREAD *self)
 VOID ThreadSleep(struct THREAD* self, UINTPTR count)
 {
     self->sleepLength = 500;
-    self->sleepStart = FwClock();
+    self->sleepStart = PalClock();
     self->isSleep = TRUE;
     ThreadLock(self);
 }
@@ -108,7 +108,7 @@ VOID ThreadLock(struct THREAD *self)
     {
         if (current == self)
         {
-            FwYieldToDispatch();
+            PalYieldToDispatch();
         }
     }
 }

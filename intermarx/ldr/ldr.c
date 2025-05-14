@@ -52,6 +52,21 @@ VOID *LdrLoadType(struct IMAGE_LOADER *thisPtr)
     type->fullName = thisPtr->stringTable[LdrImageReadIndex(thisPtr)];
     type->shortName = thisPtr->stringTable[LdrImageReadIndex(thisPtr)];
 
+    INT32 super = LdrImageReadIndex(thisPtr);
+    if (super != -1)
+    {
+        type->super = thisPtr->sections[super];
+    }
+
+    INT32 interfaceCount = LdrImageReadIndex(thisPtr);
+    for (int i = 0; i < interfaceCount; ++i)
+    {
+        RtlVectorAdd(&type->interfaces, thisPtr->sections[LdrImageReadIndex(thisPtr)]);
+    }
+
+    type->metadata = LdrImageReadIndex(thisPtr);
+
+
     if (RtlNStringCompare(type->fullName, ExByteTypeName))
     {
         type->inlined = BASE_BYTE;
@@ -104,7 +119,7 @@ VOID *LdrLoadType(struct IMAGE_LOADER *thisPtr)
     {
         type->inlined = BASE_INTPTR;
     }
-    else if (RtlNStringCompare(type->fullName, ExIntPtrTypeName))
+    else if (RtlNStringCompare(type->fullName, ExIntPtrTypeName) || ExMetadataIs(type->metadata,MxExMetadataPointer))
     {
         type->inlined = BASE_INTPTR;
     }
@@ -117,19 +132,6 @@ VOID *LdrLoadType(struct IMAGE_LOADER *thisPtr)
         type->inlined = BASE_OTHER;
     }
 
-    INT32 super = LdrImageReadIndex(thisPtr);
-    if (super != -1)
-    {
-        type->super = thisPtr->sections[super];
-    }
-
-    INT32 interfaceCount = LdrImageReadIndex(thisPtr);
-    for (int i = 0; i < interfaceCount; ++i)
-    {
-        RtlVectorAdd(&type->interfaces, thisPtr->sections[LdrImageReadIndex(thisPtr)]);
-    }
-
-    type->metadata = LdrImageReadIndex(thisPtr);
 
     return type;
 }
@@ -752,13 +754,24 @@ UINTPTR LdrCalculateTypeSize(struct RUNTIME_TYPE *thisPtr)
         }
         else
         {
-            UINTPTR size = LdrCalculateFieldSize(field);
-            UINTPTR alignedOffset = (structSize + size - 1) / size * size;
-            structSize = alignedOffset;
+            if (ExMetadataIs(field->declared->metadata,MxExMetadataSequential))
+            {
+                UINTPTR size = LdrCalculateFieldSize(field);
 
-            field->offset = structSize;
-            field->dataSize = size;
-            structSize += size;
+                field->offset = structSize;
+                field->dataSize = size;
+                structSize += size;
+            }
+            else
+            {
+                UINTPTR size = LdrCalculateFieldSize(field);
+                UINTPTR alignedOffset = (structSize + size - 1) / size * size;
+                structSize = alignedOffset;
+
+                field->offset = structSize;
+                field->dataSize = size;
+                structSize += size;
+            }
         }
     }
 
@@ -790,7 +803,7 @@ struct RUNTIME_DOMAIN *LdrLoadDomain(struct IMAGE_LOADER *thisPtr)
 
     for (int i = 0; i < sectionCount; ++i)
     {
-        struct LOADER_SECTION section;
+        struct LOADER_SECTION section = {0};
         LdrImageRead(thisPtr, &section, sizeof section);
 
         UINTPTR prevOffset = thisPtr->offset;

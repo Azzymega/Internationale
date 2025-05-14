@@ -145,3 +145,13 @@ char * itoa(int value, char *str, int base)
     }
     return rc;
 }
+
+size_t wstrlen(const wchar_t *string)
+{
+    size_t length = 0;
+    while (string[length])
+    {
+        length++;
+    }
+    return length;
+}

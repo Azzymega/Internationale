@@ -16,3 +16,4 @@ size_t strlen(const char *string);
 int memcmp(const void *s1, const void *s2, size_t n);
 void *memcpy(void *dest, void *src, size_t n);
 char *itoa(int value, char *str, int base);
+size_t wstrlen(const wchar_t* string);

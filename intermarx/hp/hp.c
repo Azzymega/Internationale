@@ -3,6 +3,7 @@
 #include <intermarx/mt/mt.h>
 #include <intermarx/ex/ex.h>
 #include <intermarx/pal/corelib.h>
+#include <pal/pal.h>
 
 #include "hpp.h"
 
@@ -40,9 +41,12 @@ VOID HpFreeNative(VOID *pointer)
     PalMemoryFree(pointer);
 }
 
+INT16 counter;
+
 VOID HpRegisterRootField(struct RUNTIME_FIELD *field)
 {
     RtlVectorAdd(&HpGlobalRootFieldList,field);
+    counter++;
 }
 
 VOID HppWaitSafepoint()
@@ -367,9 +371,9 @@ struct MANAGED_HEAP* HpGc()
 
 VOID HpManagedHeapInitialize(struct MANAGED_HEAP *thisPtr)
 {
-    thisPtr->start = PalMemoryAllocate(1024*1024*8);
+    thisPtr->start = PalMemoryAllocate(1024*1024*16);
     thisPtr->current = thisPtr->start;
-    thisPtr->size = 1024*1024*8;
+    thisPtr->size = 1024*1024*16;
     PalMonitorInitialize(&thisPtr->lock);
 }
 

@@ -20,6 +20,7 @@ VOID HalBugcheck(const CHAR *message, const CHAR *file, const CHAR* func, const 
 
 VOID HalCopyMemory(VOID* destination, VOID* source, UINTPTR length);
 VOID HalSetMemory(VOID* destination, UINTPTR value, UINTPTR length);
+VOID HalSetBlockMemory(VOID* destination, UINT32 value, UINTPTR length);
 VOID HalMoveMemory(VOID *restrict destination, const VOID *restrict source, UINTPTR length);
 DOUBLE HalFmod(DOUBLE x, DOUBLE y);
 

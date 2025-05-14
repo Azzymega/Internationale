@@ -533,7 +533,16 @@ Start:
     return value;
 }
 
-static BOOLEAN FwpPrint(const char* data, UINTPTR length)
+static BOOLEAN PaliIntWidePrint(const wchar_t* data, UINTPTR length)
+{
+    const wchar_t* bytes = (const wchar_t*)data;
+    for (UINTPTR i = 0; i < length; i++)
+        if (FwpPrintCharacterTextModeScreen(bytes[i]) == -1)
+            return FALSE;
+    return TRUE;
+}
+
+static BOOLEAN PaliIntPrint(const char* data, UINTPTR length)
 {
     const unsigned char* bytes = (const unsigned char*)data;
     for (UINTPTR i = 0; i < length; i++)
@@ -593,7 +602,7 @@ VOID PalPrint(const char* format, ...)
             {
                 return;
             }
-            if (!FwpPrint(format, amount))
+            if (!PaliIntPrint(format, amount))
                 return;
             format += amount;
             written += amount;
@@ -610,7 +619,7 @@ VOID PalPrint(const char* format, ...)
             {
                 return;
             }
-            if (!FwpPrint(&c, sizeof(c)))
+            if (!PaliIntPrint(&c, sizeof(c)))
                 return;
             written++;
         }
@@ -623,7 +632,20 @@ VOID PalPrint(const char* format, ...)
             {
                 return;
             }
-            if (!FwpPrint(str, len))
+            if (!PaliIntPrint(str, len))
+                return;
+            written += len;
+        }
+        else if (*format == 'w')
+        {
+            format++;
+            const WCHAR* str = va_arg(parameters, const WCHAR*);
+            UINTPTR len = wstrlen(str);
+            if (maxrem < len)
+            {
+                return;
+            }
+            if (!PaliIntWidePrint(str, len))
                 return;
             written += len;
         }
@@ -638,7 +660,7 @@ VOID PalPrint(const char* format, ...)
             {
                 return;
             }
-            if (!FwpPrint(str, len))
+            if (!PaliIntPrint(str, len))
                 return;
             written += len;
         }
@@ -653,7 +675,7 @@ VOID PalPrint(const char* format, ...)
             {
                 return;
             }
-            if (!FwpPrint(str, len))
+            if (!PaliIntPrint(str, len))
                 return;
             written += len;
         }
@@ -665,7 +687,7 @@ VOID PalPrint(const char* format, ...)
             {
                 return;
             }
-            if (!FwpPrint(format, len))
+            if (!PaliIntPrint(format, len))
                 return;
             written += len;
             format += len;
@@ -736,8 +758,6 @@ VOID FwPutCharacter(CHAR wchar)
 VOID PaliFramebufferInitialize()
 {
     CriticalSectionInitialize(&PalGlobalPrintLock);
-
-    //PaliEnableVesa();
 
     for (UINTPTR i = 0; i < 25; ++i)
     {

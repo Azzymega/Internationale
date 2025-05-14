@@ -241,12 +241,12 @@ struct INUPACKED PaliX86TextModeState
 
 enum PaliX86MemoryMapType
 {
-    TYPE_USABLE = 1,
-    TYPE_RESERVED = 2,
+    TYPE_USABLE           = 1,
+    TYPE_RESERVED         = 2,
     TYPE_ACPI_RECLAIMABLE = 3,
-    TYPE_ACPI_NVS = 4,
-    TYPE_BAD_MEMORY = 5,
-    TYPE_UNUSED = 6
+    TYPE_ACPI_NVS         = 4,
+    TYPE_BAD_MEMORY       = 5,
+    TYPE_UNUSED           = 6
 };
 
 struct INUPACKED PaliX86MemoryMap

@@ -98,6 +98,17 @@ INUFORCEINLINE MARX_STATUS ExNullCheck(struct RUNTIME_FRAME_BLOCK block)
                 return MARX_STATUS_SUCCESS;
             }
         }
+        case MACHINE_STRUCT:
+        {
+            if (block.valueType.pointer == NULL)
+            {
+                return MARX_STATUS_FAIL;
+            }
+            else
+            {
+                return MARX_STATUS_SUCCESS;
+            }
+        }
         default:
         {
             return MARX_STATUS_FAIL;
@@ -722,6 +733,7 @@ ExceptionHandlingZoneEnd:
             }
             case OpNoOperation:
             {
+                PalSafepoint();
                 break;
             }
             case OpDup:
@@ -1010,6 +1022,160 @@ ExceptionHandlingZoneEnd:
                 ExPush(frame, block);
                 break;
             }
+            case OpStoreValueToPointer:
+            {
+                struct RUNTIME_TYPE *loadTarget = ExGetPoolElement(&reader, frame);
+                struct RUNTIME_FRAME_BLOCK value = ExPop(frame);
+                struct RUNTIME_FRAME_BLOCK address = ExPop(frame);
+
+                switch (address.type)
+                {
+                    case MACHINE_MANAGED_POINTER:
+                    {
+                        switch (loadTarget->inlined)
+                        {
+                            case BASE_BYTE:
+                            {
+                                VOID* pointerAddress = address.link.pointer;
+                                BYTE* target = pointerAddress;
+                                *target = value.int32;
+                                break;
+                            }
+                            case BASE_CHAR:
+                            case BASE_INT16:
+                            {
+                                VOID* pointerAddress = address.link.pointer;
+                                INT16* target = pointerAddress;
+                                *target = value.int32;
+                                break;
+                            }
+                            case BASE_INT32:
+                            {
+                                VOID* pointerAddress = address.link.pointer;
+                                INT32* target = pointerAddress;
+                                *target = value.int32;
+                                break;
+                            }
+                            case BASE_INT64:
+                            {
+                                VOID* pointerAddress = address.link.pointer;
+                                INT64* target = pointerAddress;
+                                *target = value.int64;
+                                break;
+                            }
+                            case BASE_SINGLE:
+                            {
+                                VOID* pointerAddress = address.link.pointer;
+                                SINGLE* target = pointerAddress;
+                                *target = value.floating;
+                                break;
+                            }
+                            case BASE_DOUBLE:
+                            {
+                                VOID* pointerAddress = address.link.pointer;
+                                DOUBLE* target = pointerAddress;
+                                *target = value.floating;
+                                break;
+                            }
+                            case BASE_OTHER:
+                            {
+                                VOID* pointerAddress = address.link.pointer;
+                                VOID** target = pointerAddress;
+                                *target = value.descriptor;
+                                break;
+                            }
+                            case BASE_INTPTR:
+                            {
+                                VOID* pointerAddress = address.link.pointer;
+                                INTPTR* target = pointerAddress;
+                                *target = value.pointer;
+                                break;
+                            }
+                            default:
+                            {
+                                ExThrowException(&ExExecutionEngineError);
+                                goto ExceptionHandlingZone;
+                            }
+                        }
+                        break;
+                    }
+                    case MACHINE_INTPTR:
+                    {
+                        switch (loadTarget->inlined)
+                        {
+                            case BASE_BYTE:
+                            {
+                                VOID* pointerAddress = (VOID*)address.pointer;
+                                BYTE* target = pointerAddress;
+                                *target = value.int32;
+                                break;
+                            }
+                            case BASE_CHAR:
+                            case BASE_INT16:
+                            {
+                                VOID* pointerAddress = (VOID*)address.pointer;
+                                INT16* target = pointerAddress;
+                                *target = value.int32;
+                                break;
+                            }
+                            case BASE_INT32:
+                            {
+                                VOID* pointerAddress = (VOID*)address.pointer;
+                                INT32* target = pointerAddress;
+                                *target = value.int32;
+                                break;
+                            }
+                            case BASE_INT64:
+                            {
+                                VOID* pointerAddress = (VOID*)address.pointer;
+                                INT64* target = pointerAddress;
+                                *target = value.int64;
+                                break;
+                            }
+                            case BASE_SINGLE:
+                            {
+                                VOID* pointerAddress = (VOID*)address.pointer;
+                                SINGLE* target = pointerAddress;
+                                *target = value.floating;
+                                break;
+                            }
+                            case BASE_DOUBLE:
+                            {
+                                VOID* pointerAddress = (VOID*)address.pointer;
+                                DOUBLE* target = pointerAddress;
+                                *target = value.floating;
+                                break;
+                            }
+                            case BASE_OTHER:
+                            {
+                                VOID* pointerAddress = (VOID*)address.pointer;
+                                VOID** target = pointerAddress;
+                                *target = value.descriptor;
+                                break;
+                            }
+                            case BASE_INTPTR:
+                            {
+                                VOID* pointerAddress = (VOID*)address.pointer;
+                                INTPTR* target = pointerAddress;
+                                *target = value.pointer;
+                                break;
+                            }
+                            default:
+                            {
+                                ExThrowException(&ExExecutionEngineError);
+                                goto ExceptionHandlingZone;
+                            }
+                        }
+                        break;
+                    }
+                    default:
+                    {
+                        ExThrowException(&ExExecutionEngineError);
+                        goto ExceptionHandlingZone;
+                    };
+                }
+                break;
+            }
             case OpLoadValueFromPointer:
             {
                 struct RUNTIME_TYPE *loadTarget = ExGetPoolElement(&reader, frame);
@@ -1254,12 +1420,85 @@ ExceptionHandlingZoneEnd:
                         }
                         else
                         {
-                            slot.type = MACHINE_STRUCT;
-                            slot.valueType.type = target->declared;
-                            slot.valueType.pointer = __builtin_alloca(slot.valueType.type->size);
-                            PalMemoryCopy(slot.valueType.pointer, ptr, slot.valueType.type->size);
-                            break;
+                            if (ExMetadataIs(target->declared->metadata,MxExMetadataEnum))
+                            {
+                                struct RUNTIME_FIELD* firstField = RtlVectorGet(&target->declared->fields,0);
+                                switch (firstField->declared->inlined)
+                                {
+                                    case BASE_INTPTR:
+                                    {
+                                        slot.type = MACHINE_INTPTR;
+                                        INTPTR *ptrValue = ptr;
+                                        slot.pointer = *ptrValue;
+                                        break;
+                                    }
+                                    case BASE_INT64:
+                                    {
+                                        slot.type = MACHINE_INT64;
+                                        INT64 *ptrValue = ptr;
+                                        slot.int64 = *ptrValue;
+                                        break;
+                                    }
+                                    case BASE_INT32:
+                                    {
+                                        slot.type = MACHINE_INT32;
+                                        INT32 *ptrValue = ptr;
+                                        slot.int32 = *ptrValue;
+                                        break;
+                                    }
+                                    case BASE_INT16:
+                                    {
+                                        slot.type = MACHINE_INT32;
+                                        INT16 *ptrValue = ptr;
+                                        slot.int32 = *ptrValue;
+                                        break;
+                                    }
+                                    case BASE_SINGLE:
+                                    {
+                                        slot.type = MACHINE_MFLOAT;
+                                        SINGLE *ptrValue = ptr;
+                                        slot.floating = *ptrValue;
+                                        break;
+                                    }
+                                    case BASE_DOUBLE:
+                                    {
+                                        slot.type = MACHINE_MFLOAT;
+                                        DOUBLE *ptrValue = ptr;
+                                        slot.floating = *ptrValue;
+                                        break;
+                                    }
+                                    case BASE_BYTE:
+                                    {
+                                        slot.type = MACHINE_INT32;
+                                        BYTE *ptrValue = ptr;
+                                        slot.int32 = *ptrValue;
+                                        break;
+                                    }
+                                    case BASE_CHAR:
+                                    {
+                                        slot.type = MACHINE_INT32;
+                                        WCHAR *ptrValue = ptr;
+                                        slot.int32 = *ptrValue;
+                                        break;
+                                    }
+                                    default:
+                                    {
+                                        ExThrowException(&ExNullReference);
+                                        goto ExceptionHandlingZone;
+                                        break;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                slot.type = MACHINE_STRUCT;
+                                slot.valueType.type = target->declared;
+                                slot.valueType.pointer = __builtin_alloca(slot.valueType.type->size);
+                                PalMemoryCopy(slot.valueType.pointer, ptr, slot.valueType.type->size);
+                                break;
+                            }
                         }
+                        break;
                     }
                     default:
                     {
@@ -1697,7 +1936,7 @@ ExceptionHandlingZoneEnd:
             {
                 struct RUNTIME_TYPE *type = ExGetPoolElement(&reader, frame);
 
-                struct RUNTIME_FRAME_BLOCK top = ExPop(frame);
+                struct RUNTIME_FRAME_BLOCK top = ExPeek(frame);
 
                 if (top.type == MACHINE_MANAGED_POINTER)
                 {

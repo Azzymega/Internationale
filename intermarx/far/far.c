@@ -1,22 +1,25 @@
 #include <intermarx/ex/ex.h>
+#include <intermarx/ex/runtime.h>
 #include <intermarx/far/far.h>
 #include <intermarx/hp/hp.h>
 #include <intermarx/ob/ob.h>
 #include <intermarx/pal/corelib.h>
 #include <intermarx/pal/pal.h>
+#include <mm/mm.h>
 #include <pal/pal.h>
+#include <rtl/rtl.h>
 
 INUNATIVE INUEXTERN INTPTR NgAsmNativeInvokeTrampolineIntPtr(VOID *constructedStack, VOID *callTarget);
-
 INUNATIVE INUEXTERN INT32 NgAsmNativeInvokeTrampolineInt32(VOID *constructedStack, VOID *callTarget);
-
 INUNATIVE INUEXTERN INT64 NgAsmNativeInvokeTrampolineInt64(VOID *constructedStack, VOID *callTarget);
-
 INUNATIVE INUEXTERN SINGLE NgAsmNativeInvokeTrampolineSingle(VOID *constructedStack, VOID *callTarget);
-
 INUNATIVE INUEXTERN DOUBLE NgAsmNativeInvokeTrampolineDouble(VOID *constructedStack, VOID *callTarget);
-
 INUNATIVE INUEXTERN VOID *NgAsmNativeInvokeTrampolinePointer(VOID *constructedStack, VOID *callTarget);
+
+INUIMPORT struct RUNTIME_TYPE *ExStringType;
+INUIMPORT struct RUNTIME_TYPE *ExCharArrayType;
+INUIMPORT struct RUNTIME_TYPE *ExCharType;
+INUIMPORT struct RUNTIME_TYPE *ExThreadType;
 
 MARX_STATUS FarInitialize(struct RUNTIME_DOMAIN *domain)
 {
@@ -45,6 +48,24 @@ MARX_STATUS FarInitialize(struct RUNTIME_DOMAIN *domain)
         {
             L"PalManagedDelegateRemoveImplNative", &PalManagedDelegateRemoveImplNative
         },
+        {
+            L"PalX86BiosCall",&PalX86BiosCall
+        },
+        {
+            L"PalObjectToString",&PalObjectToString
+        },
+        {
+            L"PalX86GetBiosCallBuffer", &PalX86GetBiosCallBuffer
+        },
+        {
+            L"PalBufferMemoryCopy", &PalBufferMemoryCopy
+        },
+        {
+            L"PalBufferMemorySet", &PalBufferMemorySet
+        },
+        {
+            L"PalBufferMemorySetBlock", &PalBufferMemorySetBlock
+        }
     };
 
     for (int i = 0; i < domain->types.count; ++i)
@@ -85,7 +106,7 @@ MARX_STATUS FarInitialize(struct RUNTIME_DOMAIN *domain)
                             method->farCall.encoding = attribute->encoding;
                             method->farCall.source = attribute->source;
 
-                            PalPrint("%ls is imported and linked!\r\n", import[r].name);
+                            PalPrint("%w is imported and linked!\r\n", import[r].name);
 
                             break;
                         }
@@ -170,6 +191,11 @@ MARX_STATUS FarNativeMethodExecute(struct RUNTIME_FRAME *frame, struct RUNTIME_F
                             FarLoadArgument(&buffer, sizeof(void *), stackFrame, &stackFramePointer);
                             break;
                         }
+                        case STRING_ENCODING_NONE:
+                        {
+                            FarLoadArgument(&str, sizeof(void *), stackFrame, &stackFramePointer);
+                            break;
+                        }
                         default:
                         {
                             return MARX_STATUS_FAIL;
@@ -193,6 +219,19 @@ MARX_STATUS FarNativeMethodExecute(struct RUNTIME_FRAME *frame, struct RUNTIME_F
         else if (frame->args[i].type == MACHINE_INTPTR)
         {
             FarLoadArgument(&frame->args[i].pointer, sizeof(INTPTR), stackFrame, &stackFramePointer);
+        }
+        else if (frame->args[i].type == MACHINE_MANAGED_POINTER)
+        {
+            FarLoadArgument(&frame->args[i].link.pointer, sizeof(void *), stackFrame, &stackFramePointer);
+        }
+        else if (frame->args[i].type == MACHINE_STRUCT)
+        {
+            UINTPTR bufferSize = frame->args[i].valueType.type->size;
+
+            BYTE* buffer = PalStackAllocate(bufferSize);
+            PalMemoryZero(buffer,bufferSize);
+
+            FarLoadArgument(&buffer, sizeof(void *), stackFrame, &stackFramePointer);
         }
         else if (frame->args[i].type == MACHINE_MFLOAT)
         {
@@ -270,8 +309,77 @@ MARX_STATUS FarNativeMethodExecute(struct RUNTIME_FRAME *frame, struct RUNTIME_F
         case BASE_OTHER:
         {
             slot.type = MACHINE_OBJECT;
-            slot.descriptor = NgAsmNativeInvokeTrampolinePointer(&stackFrame[stackFramePointer],
+            VOID* returnPointer = NgAsmNativeInvokeTrampolinePointer(&stackFrame[stackFramePointer],
                                                                  frame->method->farCall.function);
+
+            if (frame->method->returnType == ExStringType)
+            {
+                struct MANAGED_STRING* newString = HpAllocateManaged(sizeof(struct MANAGED_STRING));
+
+                struct RUNTIME_FRAME_BLOCK stringInfo = {
+                    .type = MACHINE_OBJECT,
+                    .descriptor = newString
+                };
+                ExPush(frame,stringInfo);
+                struct RUNTIME_FRAME_BLOCK* blockPointer = &frame->stack[frame->sp-1];
+
+                ((struct MANAGED_STRING*)blockPointer->descriptor)->header.type = ExStringType;
+
+                if (frame->method->farCall.encoding == STRING_ENCODING_ISO646)
+                {
+                    CHAR* returnString = returnPointer;
+                    UINTPTR returnStringLength = strlen(returnString);
+
+                    struct MANAGED_ARRAY *array = ObManagedArrayInitialize(returnStringLength, sizeof(WCHAR));
+
+                    array->elementType = ExCharType;
+                    array->header.type = ExCharArrayType;
+                    array->count = returnStringLength;
+                    for (int i = 0; i < array->count; ++i)
+                    {
+                        array->characters[i] = returnString[i];
+                    }
+                    ((struct MANAGED_STRING*)blockPointer->descriptor)->characters = array;
+
+                    slot.descriptor = blockPointer->descriptor;
+                    ExPop(frame);
+                    MmFreePoolMemory(returnPointer);
+                }
+                else if (frame->method->farCall.encoding == STRING_ENCODING_UCS2)
+                {
+                    WCHAR* returnString = returnPointer;
+                    UINTPTR returnStringLength = wstrlen(returnString);
+
+                    struct MANAGED_ARRAY *array = ObManagedArrayInitialize(returnStringLength, sizeof(WCHAR));
+
+                    array->elementType = ExCharType;
+                    array->header.type = ExCharArrayType;
+                    array->count = returnStringLength;
+                    for (int i = 0; i < array->count; ++i)
+                    {
+                        array->characters[i] = returnString[i];
+                    }
+                    ((struct MANAGED_STRING*)blockPointer->descriptor)->characters = array;
+
+                    slot.descriptor = blockPointer->descriptor;
+                    ExPop(frame);
+                    MmFreePoolMemory(returnPointer);
+                }
+                else if (frame->method->farCall.encoding == STRING_ENCODING_NONE)
+                {
+                    ExPop(frame);
+                    slot.descriptor = returnPointer;
+                }
+                else
+                {
+                    return MARX_STATUS_FAIL;
+                }
+            }
+            else
+            {
+                slot.descriptor = returnPointer;
+            }
+
             break;
         }
         default:

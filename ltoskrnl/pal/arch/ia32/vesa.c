@@ -80,18 +80,20 @@ VOID PaliVesaClearScreen()
     struct PaliVesaPixel24 *p = PaliVesaFramebufferAddress;
 
     UINTPTR i;
-    for (i = 0; i + 7 < total; i += 8) {
-        p[i]     = pixel;
-        p[i+1]   = pixel;
-        p[i+2]   = pixel;
-        p[i+3]   = pixel;
-        p[i+4]   = pixel;
-        p[i+5]   = pixel;
-        p[i+6]   = pixel;
-        p[i+7]   = pixel;
+    for (i = 0; i + 7 < total; i += 8)
+    {
+        p[i] = pixel;
+        p[i + 1] = pixel;
+        p[i + 2] = pixel;
+        p[i + 3] = pixel;
+        p[i + 4] = pixel;
+        p[i + 5] = pixel;
+        p[i + 6] = pixel;
+        p[i + 7] = pixel;
     }
 
-    for (; i < total; ++i) {
+    for (; i < total; ++i)
+    {
         p[i] = pixel;
     }
 }

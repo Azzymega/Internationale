@@ -19,8 +19,9 @@ VOID PsiInitializeKernelProcess()
 {
     VasDescriptorInitialize(&PsGlobalKernelVas);
     ProcessInitialize(&PsGlobalKernelProcess,&PsGlobalKernelVas,PROCESS_KERNEL);
-    VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)0x80000000,(VOID*)0,1073741824,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
     VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)0,(VOID*)0,4194304,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
+    VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)0x80000000,(VOID*)0,1073741824,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
+    VasDescriptorMapMemory(&PsGlobalKernelVas,(VOID*)0xC0000000,(VOID*)0xC0000000,1073741824,VAS_DESCRIPTOR_SU | VAS_DESCRIPTOR_RW);
 }
 
 VOID PsiIdle()

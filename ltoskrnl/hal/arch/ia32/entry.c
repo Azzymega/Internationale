@@ -162,7 +162,7 @@ void HalAssert(const char* file, const char* func, const char* line)
 VOID HalBugcheck(const CHAR* message, const CHAR* file, const CHAR* func, const CHAR* line)
 {
     asm ("cli");
-    PalPrint("Assertion failed! : ");
+    PalPrint("\r\nAssertion failed! : ");
     if (message != NULL)
     {
         PalPrint(message);
@@ -213,6 +213,32 @@ VOID HalSetMemory(VOID* destination, const UINTPTR value, UINTPTR length)
         "r" (remainder)
         : "memory"
     );
+}
+
+VOID HalSetBlockMemory(VOID *destination, UINT32 value, UINTPTR length)
+{
+    UINT32 *pointerDest = destination;
+    SIZE dwordsCount = length / 4;
+    SIZE remainder = length % 4;
+
+    __asm__ __volatile__
+    (
+        "cld\n\t"
+        "rep stosl"
+        : "+D" (pointerDest), "+c" (dwordsCount)
+        : "a" (value)
+        : "memory", "cc"
+    );
+
+    if (remainder)
+    {
+        BYTE *p = (BYTE *) pointerDest;
+        const BYTE *v = (const BYTE *) &value;
+        for (SIZE i = 0; i < remainder; ++i)
+        {
+            p[i] = v[i];
+        }
+    }
 }
 
 VOID HalMoveMemory(VOID* restrict destination, const void* restrict source, size_t length)

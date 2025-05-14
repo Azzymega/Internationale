@@ -1,10 +1,13 @@
 #pragma once
+#include <hal/hal.h>
 #include <intermarx/ex/ex.h>
 #include <intermarx/hp/hp.h>
 #include <intermarx/mt/mt.h>
 #include <intermarx/pal/corelib.h>
 #include <intermarx/pal/pal.h>
 #include <pal/pal.h>
+
+#include "../../ltoskrnl/pal/arch/ia32/pali.h"
 
 
 VOID PalManagedThreadCreate(struct MANAGED_WRAPPER *thread, struct MANAGED_DELEGATE *delegate)
@@ -65,6 +68,85 @@ INT32 PalManagedThreadId()
 VOID* PalManagedThreadGetCurrent()
 {
     return MtThreadGetCurrent()->wrapper;
+}
+
+struct INUPACKED PaliVesaModeInfo
+{
+    UINT16 attributes;
+    BYTE windowA;
+    BYTE windowB;
+    UINT16 granularity;
+    UINT16 window_size;
+    UINT16 segmentA;
+    UINT16 segmentB;
+    UINT32 scary16bitSegmentFarCall;
+    UINT16 pitch;
+    UINT16 width;
+    UINT16 height;
+    BYTE wChar;
+    BYTE yChar;
+    BYTE planes;
+    BYTE bpp;
+    BYTE banks;
+    BYTE memoryModel;
+    BYTE bankSize;
+    BYTE imagePages;
+    BYTE reserved0;
+
+    BYTE redMask;
+    BYTE redPosition;
+    BYTE greenMask;
+    BYTE greenPosition;
+    BYTE blueMask;
+    BYTE bluePosition;
+    BYTE reservedMask;
+    BYTE reservedPosition;
+    BYTE directColorAttributes;
+
+    UINT32 framebuffer;
+    UINT32 offScreenMemOffset;
+    UINT16 offScreenMemSize;
+    BYTE reserved1[206];
+};
+
+VOID PalX86BiosCall(BYTE interruptIndex, struct PaliX86BiosCallFrame *frame)
+{
+    PaliX86BiosCall(interruptIndex, frame);
+    HalEnableInterrupts();
+}
+
+VOID *PalObjectToString(struct OBJECT_HEADER *header)
+{
+    CHAR *nameBuffer = MmAllocatePoolMemory(NON_PAGED_HEAP_ZEROED,
+                                             sizeof(CHAR) * (header->type->fullName.length + 1));
+
+    for (int i = 0; i < header->type->fullName.length; ++i)
+    {
+        nameBuffer[i] = header->type->fullName.characters[i];
+    }
+    nameBuffer[header->type->fullName.length] = '\0';
+
+    return nameBuffer;
+}
+
+VOID * PalX86GetBiosCallBuffer()
+{
+    return PaliGetBiosCallBuffer();
+}
+
+VOID PalBufferMemoryCopy(VOID *destination, VOID *source, UINT32 length)
+{
+    PalMemoryCopy(destination,source,length);
+}
+
+VOID PalBufferMemorySet(VOID *destination, BYTE value, UINT32 length)
+{
+    HalSetMemory(destination,value,length);
+}
+
+VOID PalBufferMemorySetBlock(VOID *destination, UINT32 value, UINT32 length)
+{
+    HalSetBlockMemory(destination,value,length*4);
 }
 
 INT64 PalTimerClock()

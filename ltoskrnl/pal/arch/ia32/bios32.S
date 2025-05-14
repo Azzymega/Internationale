@@ -72,6 +72,7 @@ RealMode:
     pushl 42(%edi)
     popfl
 
+    cli
     movl (%edi), %edi
 
     int $0x00

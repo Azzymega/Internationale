@@ -13,25 +13,25 @@ struct MANAGED_WRAPPER;
 //  Enums
 //
 
-INUSTATIC const CHAR *const ExByteTypeName = "System.Byte";
-INUSTATIC const CHAR *const ExBooleanTypeName = "System.Boolean";
-INUSTATIC const CHAR *const ExCharTypeName = "System.Char";
-INUSTATIC const CHAR *const ExSByteTypeName = "System.SByte";
-INUSTATIC const CHAR *const ExUInt16TypeName = "System.UInt16";
-INUSTATIC const CHAR *const ExInt16TypeName = "System.Int16";
-INUSTATIC const CHAR *const ExUInt32TypeName = "System.UInt32";
-INUSTATIC const CHAR *const ExInt32TypeName = "System.Int32";
-INUSTATIC const CHAR *const ExUInt64TypeName = "System.UInt64";
-INUSTATIC const CHAR *const ExInt64TypeName = "System.Int64";
-INUSTATIC const CHAR *const ExSingleTypeName = "System.Single";
-INUSTATIC const CHAR *const ExDoubleTypeName = "System.Double";
-INUSTATIC const CHAR *const ExUIntPtrTypeName = "System.UIntPtr";
-INUSTATIC const CHAR *const ExIntPtrTypeName = "System.IntPtr";
-INUSTATIC const CHAR *const ExVoidTypeName = "System.Void";
-INUSTATIC const CHAR *const ExStringTypeName = "System.String";
-INUSTATIC const CHAR *const ExThreadTypeName = "System.Threading.Thread";
-INUSTATIC const CHAR *const ExDelegateTypeName = "System.MulticastDelegate";
-INUSTATIC const CHAR *const ExFarCallTypeName = "Internationale.FarCall.FarCallAttribute";
+INUSTATIC const CHAR* const ExByteTypeName = "System.Byte";
+INUSTATIC const CHAR* const ExBooleanTypeName = "System.Boolean";
+INUSTATIC const CHAR* const ExCharTypeName = "System.Char";
+INUSTATIC const CHAR* const ExSByteTypeName = "System.SByte";
+INUSTATIC const CHAR* const ExUInt16TypeName = "System.UInt16";
+INUSTATIC const CHAR* const ExInt16TypeName = "System.Int16";
+INUSTATIC const CHAR* const ExUInt32TypeName = "System.UInt32";
+INUSTATIC const CHAR* const ExInt32TypeName = "System.Int32";
+INUSTATIC const CHAR* const ExUInt64TypeName = "System.UInt64";
+INUSTATIC const CHAR* const ExInt64TypeName = "System.Int64";
+INUSTATIC const CHAR* const ExSingleTypeName = "System.Single";
+INUSTATIC const CHAR* const ExDoubleTypeName = "System.Double";
+INUSTATIC const CHAR* const ExUIntPtrTypeName = "System.UIntPtr";
+INUSTATIC const CHAR* const ExIntPtrTypeName = "System.IntPtr";
+INUSTATIC const CHAR* const ExVoidTypeName = "System.Void";
+INUSTATIC const CHAR* const ExStringTypeName = "System.String";
+INUSTATIC const CHAR* const ExThreadTypeName = "System.Threading.Thread";
+INUSTATIC const CHAR* const ExDelegateTypeName = "System.MulticastDelegate";
+INUSTATIC const CHAR* const ExFarCallTypeName = "Internationale.FarCall.FarCallAttribute";
 
 enum EXECUTIVE_OWNER_DESCRIPTOR
 {
@@ -89,7 +89,8 @@ enum METADATA_CHARACTERISTICS
     MxExMetadataInitialize   = 16777216,
     MxExMetadataReference    = 33554432,
     MxExMetadataShapeshifter = 67108864,
-    MxExMetadataTemplate     = 134217728
+    MxExMetadataTemplate     = 134217728,
+    MxExMetadataSequential   = 268435456
 };
 
 
@@ -128,6 +129,7 @@ enum BYTECODE : BYTE
     OpLoadLocalVariableAddress,
     OpLoadArgumentAddress,
     OpLoadValueFromPointer,
+    OpStoreValueToPointer,
 
     OpLoadValueField,
     OpLoadStaticField,
@@ -341,14 +343,14 @@ struct RUNTIME_EXCEPTION_HANDLER
 
 struct FRAME_BLOCK_MANAGED_POINTER
 {
-    struct RUNTIME_TYPE *type;
-    VOID *pointer;
+    struct RUNTIME_TYPE* type;
+    VOID* pointer;
 };
 
 struct FRAME_BLOCK_STRUCT
 {
-    struct RUNTIME_TYPE *type;
-    VOID *pointer;
+    struct RUNTIME_TYPE* type;
+    VOID* pointer;
 };
 
 struct RUNTIME_FRAME_BLOCK
